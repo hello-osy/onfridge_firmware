@@ -69,8 +69,7 @@ git merge feature/xxx
 ### 1. Docker Desktop 설치 및 실행
 - Docker Desktop을 설치하고 실행합니다.
 
-### 2. Docker 이미지 빌드
-
+### 2. Docker 이미지 빌드(vscode 터미널에서 하면 됨)
 - 전체 빌드:
 
 ```bash
