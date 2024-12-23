@@ -29,6 +29,7 @@ git checkout -b feature/xxx
 ```
 
 - `feature/xxx`라는 이름의 로컬 브랜치를 생성하고 해당 브랜치로 이동합니다.
+- 로컬에 이미 feature/xxx가 있으면 -b는 빼도 됩니다.
 
 ### 2. 원격 저장소와 동기화
 
