@@ -83,3 +83,30 @@ git checkout develop
 ```
 git merge feature/xxx
 ```
+
+## Platformio 명령어
+
+1. ESP32에 코드 업로드
+```
+pio run -t upload
+```
+
+2. ESP32의 SPIFFS에 업로드(음성 파일 같은 거)
+```
+pio run -t uploadfs
+```
+
+3. UART Monitor 확인
+```
+pio device monitor
+```
+
+4. ESP-IDF 프로젝트 설정 변경
+```
+pio run -t menuconfig
+```
+
+5. ESP-IDF 프로젝트 캐시 초기화
+```
+pio run --target clean
+```
