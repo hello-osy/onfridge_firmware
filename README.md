@@ -1,11 +1,17 @@
 # 온프리지 펌웨어 개발
 
 ## 개발 기간
+<<<<<<< HEAD
 
 - 2024.12.23~
 
 ## 개발 환경 세팅
 
+=======
+- 2024.12.23~
+
+## 개발 환경 세팅
+>>>>>>> 2ceea97f85c21479417ab42ffe3121ed34d7d001
 개발 환경 세팅을 쉽게 하기 위해 Docker를 사용하여 환경을 구축할 예정입니다.
 
 ## 브랜치 운영 계획(Gitflow)
@@ -51,6 +57,10 @@ git commit -m "커밋 제목"
 git push origin feature/xxx
 ```
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 2ceea97f85c21479417ab42ffe3121ed34d7d001
 ### 4. 브랜치 병합 (feature → develop)
 
 1. `develop` 브랜치로 이동:
@@ -68,11 +78,17 @@ git merge feature/xxx
 ## Docker 사용 방법
 
 ### 1. Docker Desktop 설치 및 실행
+<<<<<<< HEAD
 
 - Docker Desktop을 설치하고 실행합니다.
 
 ### 2. Docker 이미지 빌드(vscode 터미널에서 하면 됨)
 
+=======
+- Docker Desktop을 설치하고 실행합니다.
+
+### 2. Docker 이미지 빌드(vscode 터미널에서 하면 됨)
+>>>>>>> 2ceea97f85c21479417ab42ffe3121ed34d7d001
 - 전체 빌드:
 
 ```bash
