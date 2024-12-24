@@ -25,6 +25,26 @@
 3. `main`과 `release` 브랜치는 오상영이 관리합니다.
 4. `release`에서 버그 해결을 완료한 후, `main`, `develop`, `feature` 브랜치에 모두 동기화합니다.
 
+## Docker 사용 방법
+
+### 1. Docker Desktop 설치 및 실행
+
+- Docker Desktop을 설치하고 실행합니다.
+
+### 2. Docker 이미지 빌드(vscode 터미널에서 하면 됨)
+
+- 전체 빌드(처음에만):
+
+```bash
+docker-compose up build
+```
+
+- 수정한 내용만 빌드(개발할 때):
+
+```bash
+docker-compose up -d build
+```
+
 ## 개발할 때
 
 ### 1. 로컬 브랜치 생성 및 전환
@@ -66,24 +86,4 @@ git checkout develop
 
 ```
 git merge feature/xxx
-```
-
-## Docker 사용 방법
-
-### 1. Docker Desktop 설치 및 실행
-
-- Docker Desktop을 설치하고 실행합니다.
-
-### 2. Docker 이미지 빌드(vscode 터미널에서 하면 됨)
-
-- 전체 빌드:
-
-```bash
-docker-compose up build
-```
-
-- 수정한 내용만 빌드:
-
-```bash
-docker-compose up -d build
 ```
