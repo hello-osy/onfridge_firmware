@@ -121,3 +121,5 @@ pio run --target clean
 
 1. 특정 파일만 빌드해서 업로드하고 싶으면 src/CMakeLists.txt파일을 수정하면 됩니다.
 2. platformio.ini에 정의된 속도와 .c파일에 정의된 속도가 동일한지 확인하세요.
+3. ESP32의 로그는 platformio ide에서 제공하는 Serial Monitor로 확인할 수 있습니다.
+4. vscode 외의 다른 ide에서 실행하신다면, docker환경에서 설치한 vscode server로 접속하셔서 개발하시면 됩니다.

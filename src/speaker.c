@@ -4,18 +4,21 @@
 #include "esp_system.h"
 #include "esp_log.h"
 #include "esp_spiffs.h"
-#include "driver/ledc.h"
+#include "driver/dac_continuous.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-static const char *TAG = "PWM_WAV";
+static const char *TAG = "DAC_WAV";
 
-// PWM 채널 및 타이머 설정
-#define PWM_CHANNEL      LEDC_CHANNEL_0
-#define PWM_TIMER        LEDC_TIMER_0
-#define PWM_GPIO_PIN     26 // 스피커의 IN 핀 연결
-#define SAMPLE_RATE      16000 // WAV 파일 샘플링 속도 (Hz)
+// DAC 설정
+#define DAC_CHANNEL DAC_CHAN_0 // GPIO 25번 핀 사용
+#define SAMPLE_RATE      8000 // WAV 파일 샘플링 속도 (Hz)
+
+// UART 연결 속도
 #define UART_BAUD_RATE  115200
+
+// WAV 파일 헤더 크기
+#define WAV_HEADER_SIZE 44
 
 // SPIFFS 초기화
 void spiffs_init() {
@@ -42,68 +45,75 @@ void spiffs_init() {
     ESP_LOGI(TAG, "SPIFFS total: %d, used: %d", total, used);
 }
 
-// PWM 설정
-void pwm_init() {
-    ledc_timer_config_t ledc_timer = {
-        .duty_resolution = LEDC_TIMER_10_BIT, // 10비트 해상도 (0-1023)
-        .freq_hz = SAMPLE_RATE,              // WAV 파일의 샘플링 속도와 일치
-        .speed_mode = LEDC_LOW_SPEED_MODE,
-        .timer_num = PWM_TIMER
-    };
-    ledc_timer_config(&ledc_timer);
-
-    ledc_channel_config_t ledc_channel = {
-        .channel    = PWM_CHANNEL,
-        .duty       = 0,
-        .gpio_num   = PWM_GPIO_PIN,
-        .speed_mode = LEDC_LOW_SPEED_MODE,
-        .hpoint     = 0,
-        .timer_sel  = PWM_TIMER
-    };
-    ledc_channel_config(&ledc_channel);
-}
-
-// WAV 파일 읽기 및 PWM 출력
+// WAV 파일 재생 함수
 void play_wav(const char *file_path) {
-    FILE *file = fopen(file_path, "r");
+    FILE *file = fopen(file_path, "rb");
     if (!file) {
         ESP_LOGE(TAG, "Failed to open file: %s", file_path);
         return;
     }
 
-    char wav_header[44]; // WAV 파일 헤더는 44바이트
-    fread(wav_header, 1, 44, file); // 헤더 읽기
+    // WAV 헤더 건너뛰기
+    char wav_header[WAV_HEADER_SIZE];
+    if (fread(wav_header, 1, WAV_HEADER_SIZE, file) != WAV_HEADER_SIZE) {
+        ESP_LOGE(TAG, "Failed to read WAV header");
+        fclose(file);
+        return;
+    }
+
+
+    // DAC 설정
+    dac_continuous_config_t dac_cfg = {
+        .chan_mask = 1 << DAC_CHANNEL,
+        .desc_num = 2,
+        .buf_size = 512,
+        .freq_hz = SAMPLE_RATE,
+        .clk_src = DAC_DIGI_CLK_SRC_APLL // APLL 클럭 소스를 사용
+    };
+
+    dac_continuous_handle_t dac_handle;
+    esp_err_t ret = dac_continuous_new_channels(&dac_cfg, &dac_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to configure DAC (%s)", esp_err_to_name(ret));
+        fclose(file);
+        return;
+    }
+
+    ret = dac_continuous_enable(dac_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to enable DAC Continuous (%s)", esp_err_to_name(ret));
+        dac_continuous_del_channels(dac_handle);
+        fclose(file);
+        return;
+    }
 
     uint8_t buffer[256];
     size_t bytes_read;
-
     while ((bytes_read = fread(buffer, 1, sizeof(buffer), file)) > 0) {
-        for (size_t i = 0; i < bytes_read; i++) {
-            // PWM 듀티 사이클을 WAV 데이터에 매핑
-            uint32_t duty = buffer[i] * 4; // 8비트 WAV 데이터를 10비트 듀티로 변환
-            ledc_set_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL, duty);
-            ledc_update_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL);
-
-            // 샘플 속도에 맞게 대기
-            vTaskDelay(1 / portTICK_PERIOD_MS);
+        size_t bytes_loaded = 0;
+        ret = dac_continuous_write(dac_handle, buffer, bytes_read, &bytes_loaded, portMAX_DELAY);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to write to DAC (%s)", esp_err_to_name(ret));
+            break;
         }
     }
 
+    // DAC Continuous 비활성화
+    dac_continuous_disable(dac_handle);
+    dac_continuous_del_channels(dac_handle);
     fclose(file);
+
     ESP_LOGI(TAG, "Finished playing WAV file: %s", file_path);
 }
 
-void app_main() {
+
+void app_main(void) {
     ESP_LOGI(TAG, "Initializing SPIFFS...");
     spiffs_init();
 
-    ESP_LOGI(TAG, "Initializing PWM...");
-    pwm_init();
-
-    // 무한 루프를 통해 WAV 파일 재생 반복
     while (1) {
         ESP_LOGI(TAG, "Playing WAV file...");
         play_wav("/spiffs/test.wav");
-        vTaskDelay(1000 / portTICK_PERIOD_MS); // 1초 대기
+        vTaskDelay(pdMS_TO_TICKS(1000)); // 1초 대기 후 반복
     }
 }
