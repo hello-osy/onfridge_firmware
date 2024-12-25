@@ -15,6 +15,7 @@ static const char *TAG = "PWM_WAV";
 #define PWM_TIMER        LEDC_TIMER_0
 #define PWM_GPIO_PIN     26 // 스피커의 IN 핀 연결
 #define SAMPLE_RATE      16000 // WAV 파일 샘플링 속도 (Hz)
+#define UART_BAUD_RATE  115200
 
 // SPIFFS 초기화
 void spiffs_init() {
