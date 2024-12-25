@@ -14,6 +14,11 @@
 
 static const char *TAG = "INMP441_UART";
 
+// 매크로 임시 정의 (문서 확인 후 조정)
+#ifndef I2S_STD_WS_POL_NORMAL
+#define I2S_STD_WS_POL_NORMAL 0
+#endif
+
 void i2s_init(i2s_chan_handle_t *rx_channel) {
     i2s_chan_config_t chan_cfg = {
         .id = I2S_NUM,
@@ -37,7 +42,7 @@ void i2s_init(i2s_chan_handle_t *rx_channel) {
             .slot_mode = I2S_SLOT_MODE_MONO,
             .slot_mask = I2S_STD_SLOT_LEFT,
             .ws_width = I2S_SLOT_BIT_WIDTH_16BIT,
-            .ws_pol = I2S_STD_WS_POL_NORMAL,
+            .ws_pol = false,
             .bit_shift = false,                   // Right alignment: false
             .msb_right = false                    // MSB alignment: false
         },

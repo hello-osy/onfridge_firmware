@@ -1,4 +1,4 @@
 idf_component_register(SRCS 
-    "src/microphone.c"
-    "src/speaker.c"
+    "microphone.c"
+    "speaker.c"
     INCLUDE_DIRS ".")
