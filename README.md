@@ -5,6 +5,7 @@
 - 2024.12.23~
 
 ## 개발 환경 세팅
+
 Docker를 사용하여 개발 환경을 만들었습니다.
 
 ## 브랜치 운영 계획(Gitflow)
@@ -87,26 +88,35 @@ git merge feature/xxx
 ## Platformio 명령어
 
 1. ESP32에 코드 업로드
+
 ```
 pio run -t upload
 ```
 
 2. ESP32의 SPIFFS에 업로드(음성 파일 같은 거)
+
 ```
 pio run -t uploadfs
 ```
 
 3. UART Monitor 확인
+
 ```
 pio device monitor
 ```
 
 4. ESP-IDF 프로젝트 설정 변경
+
 ```
 pio run -t menuconfig
 ```
 
 5. ESP-IDF 프로젝트 캐시 초기화
+
 ```
 pio run --target clean
 ```
+
+## 참고 사항
+
+특정 파일만 빌드해서 업로드하고 싶으면 src/CMakeLists.txt파일을 수정하면 됩니다.

@@ -4,8 +4,8 @@
 .build/
 
 # 기타 IDE 관련 파일
-# .vscode/
-# *.code-workspace
+.vscode/
+*.code-workspace
 
 # OS 종속 파일
 .DS_Store
