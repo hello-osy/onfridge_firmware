@@ -1,0 +1,17 @@
+# PlatformIO 빌드 아티팩트 및 캐시
+.pio/*
+.pioenvs/
+.build/
+
+# 기타 IDE 관련 파일
+.vscode/
+*.code-workspace
+
+# OS 종속 파일
+.DS_Store
+Thumbs.db
+
+# Python 관련 파일
+__pycache__/
+*.pyc
+*.pyo

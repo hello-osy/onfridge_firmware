@@ -44,6 +44,7 @@ COPY .vscode /app/.vscode
 
 # 애플리케이션 소스 파일 복사
 COPY . .
+COPY ./src /app/src
 
 # VSCode Server 비밀번호 없애기
 COPY config.yaml /root/.config/code-server/config.yaml

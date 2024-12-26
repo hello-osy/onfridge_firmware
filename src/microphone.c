@@ -14,6 +14,11 @@
 
 static const char *TAG = "INMP441_UART";
 
+// 매크로 임시 정의 (문서 확인 후 조정)
+#ifndef I2S_STD_WS_POL_NORMAL
+#define I2S_STD_WS_POL_NORMAL 0
+#endif
+
 void i2s_init(i2s_chan_handle_t *rx_channel) {
     i2s_chan_config_t chan_cfg = {
         .id = I2S_NUM,
@@ -36,10 +41,10 @@ void i2s_init(i2s_chan_handle_t *rx_channel) {
             .slot_bit_width = I2S_SLOT_BIT_WIDTH_16BIT,
             .slot_mode = I2S_SLOT_MODE_MONO,
             .slot_mask = I2S_STD_SLOT_LEFT,
-            .ws_width = I2S_STD_WS_WIDTH_AUTO,
-            .ws_pol = I2S_STD_WS_POL_NORMAL,
-            .bit_shift = I2S_STD_BIT_SHIFT_RIGHT,
-            .msb_first = true
+            .ws_width = I2S_SLOT_BIT_WIDTH_16BIT,
+            .ws_pol = false,
+            .bit_shift = false,                   // Right alignment: false
+            .msb_right = false                    // MSB alignment: false
         },
         .gpio_cfg = {
             .bclk = 14,  // INMP441의 SCK 핀
@@ -60,7 +65,6 @@ void uart_init() {
         .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE
-        .rx_flow_ctrl_thresh = 122,
     };
     ESP_ERROR_CHECK(uart_driver_install(UART_NUM_0, 8192, 0, 0, NULL, 0));
     ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config));

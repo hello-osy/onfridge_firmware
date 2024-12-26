@@ -5,6 +5,7 @@
 - 2024.12.23~
 
 ## 개발 환경 세팅
+
 Docker를 사용하여 개발 환경을 만들었습니다.
 
 ## 브랜치 운영 계획(Gitflow)
@@ -87,26 +88,38 @@ git merge feature/xxx
 ## Platformio 명령어
 
 1. ESP32에 코드 업로드
+
 ```
 pio run -t upload
 ```
 
 2. ESP32의 SPIFFS에 업로드(음성 파일 같은 거)
+
 ```
 pio run -t uploadfs
 ```
 
 3. UART Monitor 확인
+
 ```
 pio device monitor
 ```
 
 4. ESP-IDF 프로젝트 설정 변경
+
 ```
 pio run -t menuconfig
 ```
 
 5. ESP-IDF 프로젝트 캐시 초기화
+
 ```
 pio run --target clean
 ```
+
+## 참고 사항
+
+1. 특정 파일만 빌드해서 업로드하고 싶으면 src/CMakeLists.txt파일을 수정하면 됩니다.
+2. platformio.ini에 정의된 속도와 .c파일에 정의된 속도가 동일한지 확인하세요.
+3. ESP32의 로그는 platformio ide에서 제공하는 Serial Monitor로 확인할 수 있습니다.
+4. vscode 외의 다른 ide에서 실행하신다면, docker환경에서 설치한 vscode server로 접속하셔서 개발하시면 됩니다.
