@@ -22,6 +22,17 @@ Docker를 사용하여 개발 환경을 만들었습니다.
 3. `main`과 `release` 브랜치는 오상영이 관리합니다.
 4. `release`에서 버그 해결을 완료한 후, `main`, `develop`, `feature` 브랜치에 모두 동기화합니다.
 
+## 개발 환경 세팅
+
+1. ```git clone https://github.com/hello-osy/onfridge_firmware.git```
+2. docker desktop 프로그램을 실행한다.(미리 다운 받으시면 됩니다.)
+3. ```docker-compose up --build``` (시간이 많이 걸립니다. 오상영 노트북으로는 1000초??)
+4. ```http://localhost:8080/``` 주소로 접속하면 vscode server에서 개발할 수 있습니다.
+(그냥 로컬 vscode에 platformio ide extension다운 받으셔서 개발하셔도 됩니다.)
+5. ```pio device list```에 나오는 포트 이름대로 platform.ini 파일의 upload_port를 수정하시면 됩니다.
+6. GND와 0번포트를 수-수 점퍼케이블로 연결하고 나서, esp32개발 보드의 boot와 en버튼을 15초 정도 눌러주세요.(초기화)
+7. ```pio run -t upload```로 코드를 업로드해보세요. ```pio run -t uploadfs```를 그 다음에 입력하면 음성 파일도 업로드할 수 있습니다. 
+
 ## Docker 사용 방법
 
 ### 1. Docker Desktop 설치 및 실행
@@ -115,6 +126,11 @@ pio run -t menuconfig
 
 ```
 pio run --target clean
+```
+
+6. PlatformIO에서 사용 가능한 직렬 포트를 확인
+```
+pio device list
 ```
 
 ## 참고 사항

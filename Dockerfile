@@ -39,9 +39,6 @@ ENV IDF_PATH="/esp-idf"
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# .vscode 설정 복사
-COPY .vscode /app/.vscode
-
 # 애플리케이션 소스 파일 복사
 COPY . .
 COPY ./src /app/src
