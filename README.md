@@ -139,3 +139,6 @@ pio device list
 2. platformio.ini에 정의된 속도와 .c파일에 정의된 속도가 동일한지 확인하세요.
 3. ESP32의 로그는 platformio ide에서 제공하는 Serial Monitor로 확인할 수 있습니다.
 4. vscode 외의 다른 ide에서 실행하신다면, docker환경에서 설치한 vscode server로 접속하셔서 개발하시면 됩니다.
+5. ```docker compose up --build```가 지나치게 빠르게 되면서 espidf 관련 오류가 뜨면, vscode platformio ide extension을 삭제하시면 됩니다.(계속 오류 뜨면 처음부터 clone 다시 하고, 가능한 많은 것을 다시 설치)
+6. 로컬에서 계속 안 되면, ```https://localhost:8080```에서 개발하시면 됩니다.(컨테이너 실행중일 때 localhost:8080 사용 가능)
+7. 로컬에서 문제 해결해서 하는 게 나을 듯.

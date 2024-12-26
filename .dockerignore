@@ -1,0 +1,6 @@
+.pio
+.git
+__pycache__
+*.tar
+*.log
+node_modules
