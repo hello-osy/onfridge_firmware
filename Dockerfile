@@ -1,5 +1,5 @@
 # Python 베이스 이미지 사용
-FROM python:3.12-slim as base
+FROM python:3.12-slim AS base
 
 # 작업 디렉토리 설정
 WORKDIR /app
@@ -31,9 +31,13 @@ RUN /esp-idf/install.sh
 # PlatformIO 설치
 RUN pip install --no-cache-dir platformio
 
+
 # ESP-IDF 환경 변수 추가
 ENV PATH="/esp-idf/tools:$PATH"
 ENV IDF_PATH="/esp-idf"
+
+# 컨테이너 내 udev 설치
+RUN apt-get update && apt-get install -y udev
 
 # Python 의존성 복사 및 설치
 COPY requirements.txt .
@@ -41,16 +45,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # 애플리케이션 소스 파일 복사
 COPY . .
-COPY ./src /app/src
 
-# VSCode Server 비밀번호 없애기
-COPY config.yaml /root/.config/code-server/config.yaml
-
-# VSCode Server 설치
-RUN curl -fsSL https://code-server.dev/install.sh | sh
-
-# VSCode Server의 기본 포트 설정
-EXPOSE 8080
-
-# VSCode Server 실행 명령
-CMD ["code-server", "--bind-addr", "0.0.0.0:8080", "/app"]
+# 기본 실행 명령 설정
+CMD ["bash"]

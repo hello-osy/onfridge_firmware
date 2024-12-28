@@ -26,11 +26,11 @@ Docker를 사용하여 개발 환경을 만들었습니다.
 
 1. ```git clone https://github.com/hello-osy/onfridge_firmware.git```
 2. docker desktop 프로그램을 실행한다.(미리 다운 받으시면 됩니다.)
-3. ```docker-compose up --build``` (시간이 많이 걸립니다. 오상영 노트북으로는 1000초??)
-4. ```http://localhost:8080/``` 주소로 접속하면 vscode server에서 개발할 수 있습니다.
-(그냥 로컬 vscode에 platformio ide extension다운 받으셔서 개발하셔도 됩니다.)
-5. ```pio device list```에 나오는 포트 이름대로 platform.ini 파일의 upload_port를 수정하시면 됩니다.
-6. GND와 0번포트를 수-수 점퍼케이블로 연결하고 나서, esp32개발 보드의 boot와 en버튼을 15초 정도 눌러주세요.(초기화)
+3. ```docker-compose up --build```
+4. ```pio device list```에 나오는 포트 이름대로 platform.ini 파일의 upload_port를 수정하시면 됩니다.
+5. GND와 0번포트를 수-수 점퍼케이블로 연결하고 나서, esp32개발 보드의 boot와 en버튼을 15초 정도 눌러주세요.(초기화)
+6. ```docker start onfridge_firmware_container```컨테이너를 실행하고, 
+```docker exec -it onfridge_firmware_container bash```컨테이너 안에서 작업해주세요.
 7. ```pio run -t upload```로 코드를 업로드해보세요. ```pio run -t uploadfs```를 그 다음에 입력하면 음성 파일도 업로드할 수 있습니다. 
 
 ## Docker 사용 방법
@@ -47,10 +47,19 @@ Docker를 사용하여 개발 환경을 만들었습니다.
 docker-compose up build
 ```
 
-- 수정한 내용만 빌드(개발할 때):
+- 개발할 때:
 
 ```bash
-docker-compose up -d build
+docker-compose down
+docker-compose up -d --build
+```
+
+- docker 빌드 캐시 삭제 명령:
+```bash
+docker builder prune
+docker image prune -a
+docker volume prune
+docker system prune -a --volumes
 ```
 
 ## 개발할 때
@@ -138,7 +147,4 @@ pio device list
 1. 특정 파일만 빌드해서 업로드하고 싶으면 src/CMakeLists.txt파일을 수정하면 됩니다.
 2. platformio.ini에 정의된 속도와 .c파일에 정의된 속도가 동일한지 확인하세요.
 3. ESP32의 로그는 platformio ide에서 제공하는 Serial Monitor로 확인할 수 있습니다.
-4. vscode 외의 다른 ide에서 실행하신다면, docker환경에서 설치한 vscode server로 접속하셔서 개발하시면 됩니다.
-5. ```docker compose up --build```가 지나치게 빠르게 되면서 espidf 관련 오류가 뜨면, vscode platformio ide extension을 삭제하시면 됩니다.(계속 오류 뜨면 처음부터 clone 다시 하고, 가능한 많은 것을 다시 설치)
-6. 로컬에서 계속 안 되면, ```https://localhost:8080```에서 개발하시면 됩니다.(컨테이너 실행중일 때 localhost:8080 사용 가능)
-7. 로컬에서 문제 해결해서 하는 게 나을 듯.
+4. ```docker compose up --build```가 지나치게 빠르게 되면서 espidf 관련 오류가 뜨면, docker 캐시를 삭제하고 다시 빌드해주세요.

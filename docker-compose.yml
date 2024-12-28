@@ -1,17 +1,17 @@
-version: "3.8"
-
 services:
   onfridge_firmware:
+    container_name: onfridge_firmware_container
     build:
       context: .
       dockerfile: Dockerfile
     volumes:
       - .:/app # 현재 디렉토리를 컨테이너 내부에 마운트
-    ports:
-      - "8080:8080" # VSCode Server를 위한 포트
     devices:
-      - "${USB_DEVICE:-/dev/null}:/dev/ttyUSB0" # USB 포트 연결 (ESP32 플래싱용) USB 장치가 없으면 /dev/null 사용
+      - "/dev/ttyS2:/dev/ttyUSB0"  # Windows의 COM3 -> 컨테이너 내부의 /dev/ttyUSB0
     environment:
       - IDF_PATH=/esp-idf
     stdin_open: true
     tty: true
+    privileged: true
+    command: >
+      bash -c "chmod 666 /dev/ttyUSB0 && exec bash"
