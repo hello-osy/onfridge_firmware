@@ -53,6 +53,7 @@ docker-compose up build
 docker-compose down
 docker-compose up -d --build
 ```
+이렇게 해야, 수정된 코드가 컨테이너에 반영됩니다.
 
 - docker 빌드 캐시 삭제 명령:
 ```bash
@@ -148,3 +149,16 @@ pio device list
 2. platformio.ini에 정의된 속도와 .c파일에 정의된 속도가 동일한지 확인하세요.
 3. ESP32의 로그는 platformio ide에서 제공하는 Serial Monitor로 확인할 수 있습니다.
 4. ```docker compose up --build```가 지나치게 빠르게 되면서 espidf 관련 오류가 뜨면, docker 캐시를 삭제하고 다시 빌드해주세요.
+5. 
+```
+usbipd unbind --busid 1-1
+usbipd detach --busid 1-1
+usbipd list
+usbipd bind --busid 1-1   
+usbipd attach --busid 1-1 --wsl
+
+dmesg | grep usb
+ls -l /dev/ttyUSB0
+
+echo "10c4 ea60" | tee /sys/bus/usb-serial/drivers/cp210x/new_id
+```

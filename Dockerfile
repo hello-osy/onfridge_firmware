@@ -21,6 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     unzip \
     build-essential \
+    kmod \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -43,7 +44,7 @@ RUN apt-get update && apt-get install -y udev
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 애플리케이션 소스 파일 복사
+# 호스트의 모든 파일을 컨테이너로 복사
 COPY . .
 
 # 기본 실행 명령 설정
