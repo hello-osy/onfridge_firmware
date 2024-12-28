@@ -27,11 +27,20 @@ Docker를 사용하여 개발 환경을 만들었습니다.
 1. ```git clone https://github.com/hello-osy/onfridge_firmware.git```
 2. docker desktop 프로그램을 실행한다.(미리 다운 받으시면 됩니다.)
 3. ```docker-compose up --build```
-4. ```pio device list```에 나오는 포트 이름대로 platform.ini 파일의 upload_port를 수정하시면 됩니다.
-5. GND와 0번포트를 수-수 점퍼케이블로 연결하고 나서, esp32개발 보드의 boot와 en버튼을 15초 정도 눌러주세요.(초기화)
-6. ```docker start onfridge_firmware_container```컨테이너를 실행하고, 
+4. usbipd 명령어를 입력해주세요.(uspipd를 깃허브에서 msi파일 받아서 설치하세요)
+```usbipd unbind --busid 1-1
+usbipd detach --busid 1-1
+usbipd list
+usbipd bind --busid 1-1   
+usbipd attach --busid 1-1 --wsl
+```
+
+5. ```pio device list```에 나오는 포트 이름대로 platform.ini 파일의 upload_port를 수정하시면 됩니다.
+6. GND와 0번포트를 수-수 점퍼케이블로 연결하고 나서, esp32개발 보드의 boot와 en버튼을 15초 정도 눌러주세요.(초기화)
+7. ```docker start onfridge_firmware_container```컨테이너를 실행하고, 
 ```docker exec -it onfridge_firmware_container bash```컨테이너 안에서 작업해주세요.
-7. ```pio run -t upload```로 코드를 업로드해보세요. ```pio run -t uploadfs```를 그 다음에 입력하면 음성 파일도 업로드할 수 있습니다. 
+8. ```pio run -t upload```로 코드를 업로드해보세요. ```pio run -t uploadfs```를 그 다음에 입력하면 음성 파일도 업로드할 수 있습니다. 
+9. 회로에 옮겨 꽂았는데 소리 안 나면, en버튼 살짝 누르시면 됩니다.
 
 ## Docker 사용 방법
 

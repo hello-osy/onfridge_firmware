@@ -47,5 +47,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 호스트의 모든 파일을 컨테이너로 복사
 COPY . .
 
-# 기본 실행 명령 설정
-CMD ["bash"]
+# udev 규칙 설정을 위한 스크립트 추가
+COPY scripts/set_new_id.sh /usr/local/bin/set_new_id.sh
+RUN chmod +x /usr/local/bin/set_new_id.sh
+
+
+# 컨테이너가 시작될 때마다 `set_new_id.sh`를 실행하도록 설정
+CMD ["/bin/bash", "-c", "/usr/local/bin/set_new_id.sh && exec bash"]

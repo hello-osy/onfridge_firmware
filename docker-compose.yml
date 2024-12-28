@@ -14,4 +14,4 @@ services:
     tty: true
     privileged: true
     command: >
-      bash -c "chmod 666 /dev/ttyUSB0 && exec bash"
+      bash -c "/usr/local/bin/set_new_id.sh && exec bash"  # set_new_id.sh 스크립트 실행
