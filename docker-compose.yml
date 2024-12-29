@@ -4,14 +4,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    volumes:
-      - .:/app # 현재 디렉토리를 컨테이너 내부에 마운트
     devices:
       - "/dev/ttyS2:/dev/ttyUSB0"  # Windows의 COM3 -> 컨테이너 내부의 /dev/ttyUSB0
+    volumes:
+      - /sys:/sys  # /sys 디렉토리 마운트
     environment:
       - IDF_PATH=/esp-idf
     stdin_open: true
     tty: true
     privileged: true
-    command: >
-      bash -c "/usr/local/bin/set_new_id.sh && exec bash"  # set_new_id.sh 스크립트 실행
+    command: /app/scripts/set_new_id.sh

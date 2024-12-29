@@ -22,6 +22,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     build-essential \
     kmod \
+    udev \
+    dos2unix \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -37,9 +39,6 @@ RUN pip install --no-cache-dir platformio
 ENV PATH="/esp-idf/tools:$PATH"
 ENV IDF_PATH="/esp-idf"
 
-# 컨테이너 내 udev 설치
-RUN apt-get update && apt-get install -y udev
-
 # Python 의존성 복사 및 설치
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -47,10 +46,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 호스트의 모든 파일을 컨테이너로 복사
 COPY . .
 
-# udev 규칙 설정을 위한 스크립트 추가
-COPY scripts/set_new_id.sh /usr/local/bin/set_new_id.sh
-RUN chmod +x /usr/local/bin/set_new_id.sh
+# Windows 파일 줄 바꿈 형식 변환 및 실행 권한 추가
+RUN dos2unix /app/scripts/set_new_id.sh && chmod +x /app/scripts/set_new_id.sh
 
-
-# 컨테이너가 시작될 때마다 `set_new_id.sh`를 실행하도록 설정
-CMD ["/bin/bash", "-c", "/usr/local/bin/set_new_id.sh && exec bash"]
+# 컨테이너가 시작될 때마다 스크립트를 실행하도록 설정
+CMD ["/app/scripts/set_new_id.sh"]
+#CMD ["bash"]
