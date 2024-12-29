@@ -48,15 +48,22 @@ usbipd attach --busid 1-1 --wsl
 권한이 없어서 Access denied된다면,
 `Start-Process PowerShell -Verb runAs -ArgumentList "usbipd attach --busid 1-5 --wsl"` 이런 형식으로 명령어를 입력하시면 됩니다.
 
-4. docker desktop 프로그램을 실행한다.(미리 다운 받으시면 됩니다.)
-5. ESP32 개발 보드와 컴퓨터를 선으로 연결하고 나서, `docker-compose up --build`
+4. 호스트(컨테이너 밖) 터미널에서, `wsl`입력해서 wsl접속한 다음, `modprobe cp210x`명령어를 입력하고 나서 `exit`해주세요.
 
-6. GND와 0번포트를 수-수 점퍼케이블로 연결하고 나서, esp32개발 보드의 boot와 en버튼을 15초 정도 눌러주세요.(초기화)
-7. `docker start onfridge_firmware_container` -> 컨테이너를 실행하고,
+5. docker desktop 프로그램을 실행한다.(미리 다운 받으시면 됩니다.)
+6. ESP32 개발 보드와 컴퓨터를 선으로 연결하고 나서, `docker-compose up --build`
+
+   ![alt text](image-1.png) 이렇게 뜨면 잘 된거에요. ctrl+c해서 나가주세요.
+
+7. GND와 0번포트를 수-수 점퍼케이블로 연결하고 나서, esp32개발 보드의 boot와 en버튼을 15초 정도 눌러주세요.(초기화)
+8. `docker start onfridge_firmware_container` -> 컨테이너를 실행하고,
    `docker exec -it onfridge_firmware_container bash` -> 컨테이너 안에서 작업해주세요.
-8. `pio device list`에 나오는 포트 이름대로 platform.ini 파일의 upload_port를 수정하시면 됩니다.
-9. `pio run -t upload`로 코드를 업로드해보세요. `pio run -t uploadfs`를 그 다음에 입력하면 음성 파일도 업로드할 수 있습니다.
-10. 회로에 옮겨 꽂았는데 소리 안 나면, en버튼 살짝 누르시면 됩니다.
+9. `pio device list`에 나오는 포트 이름대로 platform.ini 파일의 upload_port를 수정하시면 됩니다.
+
+   ![alt text](image-2.png) 이렇게 뜨면 잘 된거에요.
+
+10. `pio run -t upload`로 코드를 업로드해보세요. `pio run -t uploadfs`를 그 다음에 입력하면 음성 파일도 업로드할 수 있습니다.
+11. 회로에 옮겨 꽂았는데 소리 안 나면(speaker.c), en버튼 살짝 누르시면 됩니다.
 
 ## Docker 사용 방법
 
@@ -190,3 +197,6 @@ ls -l /dev/ttyUSB0
 
 echo "10c4 ea60" | tee /sys/bus/usb-serial/drivers/cp210x/new_id
 ```
+
+5. 컴퓨터에 docker-desktop외의 다른 배포판이 wsl기본값으로 설정되어있으면 오류가 생길 수 있습니다.
+   `wsl --list --verbose`로 WSL 배포판 이름을 확인하시고, `wsl --unregister <distribution_name>`로 쓸데 없는 WSL 배포판을 삭제해주세요.
