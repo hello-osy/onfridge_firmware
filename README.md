@@ -26,7 +26,7 @@ Docker를 사용하여 개발 환경을 만들었습니다.
 
 1. ```git clone https://github.com/hello-osy/onfridge_firmware.git```
 2. docker desktop 프로그램을 실행한다.(미리 다운 받으시면 됩니다.)
-3. ```docker-compose up --build```
+3. ESP32 개발 보드와 컴퓨터를 선으로 연결하고 나서, ```docker-compose up --build```
 4. uspipd를 (https://github.com/dorssel/usbipd-win/releases/tag/v4.3.0 여기서) msi파일 받아서 설치해주세요.
 Silicon Labs CP210X 드라이버를 설치해주세요. (설치 방법: https://manuals.plus/ko/silicon-labs/cp210x-universal-windows-driver-software-manual)
 
