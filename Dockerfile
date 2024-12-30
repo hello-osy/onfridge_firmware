@@ -24,6 +24,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     kmod \
     udev \
     dos2unix \
+    alsa-utils \
+    bsdmainutils \
+    nano \
+    vim \
+    gcc \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

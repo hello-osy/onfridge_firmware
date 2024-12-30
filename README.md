@@ -73,20 +73,25 @@ usbipd attach --busid 1-1 --wsl
 
 ### 2. Docker 이미지 빌드(vscode 터미널에서 하면 됨)
 
-- 전체 빌드(처음에만):
+전체 빌드는 처음에 1번만 하시면 됩니다.
+
+- 전체 빌드:
 
 ```bash
 docker-compose up --build
 ```
 
-- 개발할 때:
+- 전체 빌드 후 도커 컨테이너 백그라운드 실행:
 
 ```bash
-docker-compose down
 docker-compose up -d --build
 ```
 
-이렇게 해야, 수정된 코드가 컨테이너에 반영됩니다.
+- 도커 컨테이너 중지 및 제거
+
+```bash
+docker-compose down
+```
 
 - docker 빌드 캐시 삭제 명령:
 
@@ -97,12 +102,57 @@ docker volume prune
 docker system prune -a --volumes
 ```
 
+### 3. 호스트에서 수정한 코드를 도커 컨테이너에 반영
+
+- 도커 컨테이너 내부로 파일 복사하기
+
+```
+docker cp sound_receiver.py onfridge_firmware_container:/app/sound_receiver.py
+docker cp microphone.c onfridge_firmware_container:/app/microphone.c
+```
+
+- 컨테이너 진입
+
+```
+docker start onfridge_firmware_container
+docker exec -it onfridge_firmware_container bash
+```
+
+- 작업 디렉터리 이동(/app)
+
+```
+cd /app
+```
+
+- 필요한 빌드/적용 작업 수행
+
+```
+python sound_receiver.py
+```
+
+```
+gcc -o microphone microphone.c -lesp32 -lpthread
+chmod +x microphone
+./microphone
+```
+
+### 4. 도커 컨테이너에서 수정한 코드를 호스트에 반영
+
+- 도커 컨테이너에서 호스트로 파일 복사
+
+```
+docker cp onfridge_firmware_container:/app/sound_receiver.py ./sound_receiver.py
+docker cp onfridge_firmware_container:/app/microphone.c ./microphone.c
+```
+
 ## 개발할 때
 
 ### 1. 로컬 브랜치 생성 및 전환
 
 ```
+
 git checkout -b feature/xxx
+
 ```
 
 - `feature/xxx`라는 이름의 로컬 브랜치를 생성하고 해당 브랜치로 이동합니다.
@@ -111,7 +161,9 @@ git checkout -b feature/xxx
 ### 2. 원격 저장소와 동기화
 
 ```
+
 git pull origin feature/xxx
+
 ```
 
 - 원격 저장소의 `feature/xxx`와 로컬의 `feature/xxx`를 동기화합니다.
@@ -121,9 +173,11 @@ git pull origin feature/xxx
 - 개발을 완료한 후, 변경 사항을 커밋하고 푸시합니다.
 
 ```
+
 git add .
 git commit -m "커밋 제목"
 git push origin feature/xxx
+
 ```
 
 ### 4. 브랜치 병합 (feature → develop)
@@ -131,13 +185,17 @@ git push origin feature/xxx
 1. `develop` 브랜치로 이동:
 
 ```
+
 git checkout develop
+
 ```
 
 2. `feature/xxx` 브랜치를 `develop` 브랜치에 병합:
 
 ```
+
 git merge feature/xxx
+
 ```
 
 ## Platformio 명령어
@@ -145,37 +203,49 @@ git merge feature/xxx
 1. ESP32에 코드 업로드
 
 ```
+
 pio run -t upload
+
 ```
 
 2. ESP32의 SPIFFS에 업로드(음성 파일 같은 거)
 
 ```
+
 pio run -t uploadfs
+
 ```
 
 3. UART Monitor 확인
 
 ```
+
 pio device monitor
+
 ```
 
 4. ESP-IDF 프로젝트 설정 변경
 
 ```
+
 pio run -t menuconfig
+
 ```
 
 5. ESP-IDF 프로젝트 캐시 초기화
 
 ```
+
 pio run --target clean
+
 ```
 
 6. PlatformIO에서 사용 가능한 직렬 포트를 확인
 
 ```
+
 pio device list
+
 ```
 
 ## 참고 사항
@@ -186,6 +256,7 @@ pio device list
 4.
 
 ```
+
 usbipd unbind --busid 1-1
 usbipd detach --busid 1-1
 usbipd list
@@ -196,7 +267,12 @@ dmesg | grep usb
 ls -l /dev/ttyUSB0
 
 echo "10c4 ea60" | tee /sys/bus/usb-serial/drivers/cp210x/new_id
+
 ```
 
 5. 컴퓨터에 docker-desktop외의 다른 배포판이 wsl기본값으로 설정되어있으면 오류가 생길 수 있습니다.
-   `wsl --list --verbose`로 WSL 배포판 이름을 확인하시고, `wsl --unregister <distribution_name>`로 쓸데 없는 WSL 배포판을 삭제해주세요.
+   `wsl --list --verbose`로 WSL 배포판 이름을 확인하시고, `wsl --unregister <distribution_name>`로 사용하지 않는 WSL 배포판을 삭제해주세요.
+6. `aplay received_audio.wav` 형식의 명령어로 wav파일을 재생할 수 있습니다.
+7. `hexdump -C received_audio.raw` 형식의 명령어로 raw파일을 볼 수 있습니다.
+8. usb를 뺐다가 꽂을 때마다, `usbipd attach --busid 1-1 --wsl`명령어를 입력해줘야 합니다. 그래야 docker container에서 esp32 개발 보드를 인식할 수 있습니다.(usb 선은 웬만하면 뽑지 않는 것이 좋을 것 같습니다.)
+9. 도커 컨테이너 내에서 vim 또는 nano로 개발할 수도 있습니다. 개발하신 내용을 호스트에도(컨테이너 밖) 반영해서 git으로 공유해주세요~

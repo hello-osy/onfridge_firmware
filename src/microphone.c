@@ -10,14 +10,9 @@
 #define SAMPLE_RATE     8000
 #define I2S_BUFFER_SIZE 8192
 #define RECORDING_SIZE  (SAMPLE_RATE * 2)  // 1초 동안 데이터 (16-bit PCM, Mono)
-#define UART_BAUD_RATE  921600
+#define UART_BAUD_RATE  115200
 
 static const char *TAG = "INMP441_UART";
-
-// 매크로 임시 정의 (문서 확인 후 조정)
-#ifndef I2S_STD_WS_POL_NORMAL
-#define I2S_STD_WS_POL_NORMAL 0
-#endif
 
 void i2s_init(i2s_chan_handle_t *rx_channel) {
     i2s_chan_config_t chan_cfg = {
@@ -56,6 +51,8 @@ void i2s_init(i2s_chan_handle_t *rx_channel) {
 
     ESP_ERROR_CHECK(i2s_channel_init_std_mode(*rx_channel, &std_cfg));
     ESP_ERROR_CHECK(i2s_channel_enable(*rx_channel));
+
+    ESP_LOGI(TAG, "I2S initialized successfully.");
 }
 
 void uart_init() {
@@ -66,8 +63,10 @@ void uart_init() {
         .stop_bits = UART_STOP_BITS_1,
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE
     };
-    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_0, 8192, 0, 0, NULL, 0));
+    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_0, 16384, 0, 0, NULL, 0));
     ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config));
+
+    ESP_LOGI(TAG, "UART initialized successfully.");
 }
 
 void record_and_send_audio(i2s_chan_handle_t rx_channel) {
@@ -82,8 +81,12 @@ void record_and_send_audio(i2s_chan_handle_t rx_channel) {
 
     while (total_bytes < RECORDING_SIZE) {
         size_t bytes_to_read = I2S_BUFFER_SIZE;
-        ESP_ERROR_CHECK(i2s_channel_read(rx_channel, recording_buffer + total_bytes, bytes_to_read, &bytes_read, portMAX_DELAY));
-        total_bytes += bytes_read;
+        // 마이크로부터 데이터 가져오고, 성공 여부를 true/false로 리턴
+        esp_err_t err = i2s_channel_read(rx_channel, recording_buffer + total_bytes, bytes_to_read, &bytes_read, portMAX_DELAY);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "I2S read failed: %s", esp_err_to_name(err));
+            break;
+        }total_bytes += bytes_read;
     }
 
     ESP_LOGI(TAG, "Recording complete. Sending 1 second data (%d bytes)...", total_bytes);
@@ -99,13 +102,6 @@ void record_and_send_audio(i2s_chan_handle_t rx_channel) {
 
     ESP_LOGI(TAG, "UART transmission complete.");
     free(recording_buffer);
-}
-
-
-void cleanup(i2s_chan_handle_t rx_channel) {
-    ESP_ERROR_CHECK(i2s_channel_disable(rx_channel));
-    ESP_ERROR_CHECK(i2s_del_channel(rx_channel));
-    ESP_LOGI(TAG, "I2S cleaned up.");
 }
 
 void app_main() {
@@ -126,8 +122,6 @@ void app_main() {
             if (strcmp(rx_buffer, "START_RECORDING\n") == 0) {
                 ESP_LOGI(TAG, "Command received: START_RECORDING");
                 record_and_send_audio(rx_channel);
-                cleanup(rx_channel);
-                i2s_init(&rx_channel);  // I2S 재초기화
             } else {
                 ESP_LOGW(TAG, "Unknown command: %s", rx_buffer);
             }
