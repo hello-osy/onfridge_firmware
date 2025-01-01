@@ -8,11 +8,11 @@
 
 #define I2S_NUM         I2S_NUM_0
 #define SAMPLE_RATE     8000
-#define DMA_BUFFER_COUNT 6
+#define DMA_BUFFER_COUNT 8
 #define I2S_BUFFER_SIZE (DMA_BUFFER_COUNT * 1024)  // I2S 데이터 처리를 위해 필요한 전체 DMA 버퍼 크기(1kb 짜리 DMA 버퍼 6개)
 #define RECORDING_SIZE  (SAMPLE_RATE * 2)         // 1초 데이터 크기
 #define UART_BAUD_RATE  115200
-#define UART_CHUNK_SIZE 512                       // UART 전송 청크 크기
+#define UART_CHUNK_SIZE 256                       // UART 전송 청크 크기
 
 static const char *TAG = "INMP441_UART";
 
@@ -53,7 +53,7 @@ void i2s_init(i2s_chan_handle_t *i2s_rx_channel) {
             .data_bit_width = I2S_DATA_BIT_WIDTH_16BIT, // 데이터 비트: 16비트
             .slot_bit_width = I2S_DATA_BIT_WIDTH_16BIT, // 슬롯 비트: 16비트
             .slot_mode = I2S_SLOT_MODE_MONO,            // 모노 모드
-            .slot_mask = I2S_STD_SLOT_RIGHT             // 우측 슬롯 사용
+            .slot_mask = I2S_STD_SLOT_LEFT              // 좌측 슬롯 사용
         },
         .gpio_cfg = {
             .bclk = 14,  // INMP441의 SCK 핀
@@ -102,7 +102,7 @@ void record_and_send_audio(i2s_chan_handle_t i2s_rx_channel) {
     for (size_t i = 0; i < total_bytes; i += UART_CHUNK_SIZE) {
         size_t chunk_size = (total_bytes - i > UART_CHUNK_SIZE) ? UART_CHUNK_SIZE : total_bytes - i;
         uart_write_bytes(UART_NUM_0, (const char *)(audio_buffer + i), chunk_size);
-        vTaskDelay(pdMS_TO_TICKS(10)); // 10ms 지연
+        vTaskDelay(pdMS_TO_TICKS(100)); // 100ms 지연
     }
     uart_write_bytes(UART_NUM_0, "<DATA_END>", strlen("<DATA_END>"));
 
@@ -134,11 +134,6 @@ void app_main() {
         }
         vTaskDelay(pdMS_TO_TICKS(100));  // 100ms 대기
     }
-    // 종료 전 자원 해제
-    ESP_LOGI(TAG, "Releasing resources...");
-    i2s_channel_disable(i2s_rx_channel);
-    i2s_del_channel(i2s_rx_channel);
-    uart_driver_delete(UART_NUM_0);
-
+    
     ESP_LOGI(TAG, "Application terminated.");
 }

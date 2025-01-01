@@ -234,19 +234,19 @@ pio device list
 
 ```
 
-## tmux & socat& minicom 사용방법(`pio device monitor` 대신에 사용하는 프로그램)
+## tmux & socat & minicom 사용 방법(`pio device monitor` 대신에 사용하는 프로그램)
 
-1. `tmux` 새로운 tmux 세션이 열립니다.
-2. `pkill -f "socat -d -d /dev/ttyUSB0"` `socat -d -d /dev/ttyUSB0,raw,echo=0 PTY,link=/tmp/ttyV0 &` 명령어를 입력하고 `Enter`를 한 번 더 눌러주세요. 첫 번째 창에서 socat을 실행하여 ESP32의 실제 UART 포트(/dev/ttyUSB0)를 가상 포트(/tmp/ttyV0)로 연결합니다.
-3. `python sound_receiver.py > /tmp/python_logs.txt` 첫 번째 tmux 창에서 프로그램을 실행해주세요.
-4. tmux에서 새로운 창을 열기 위해 `Ctrl + B`누르고, 그다음 `"` 키를 눌러 세션을 두 개로 분할합니다.
-5. `minicom -D /dev/ttyUSB0 -b 115200` 두 번째 tmux 창에서 실제 포트(/dev/ttyUSB0)를 minicom으로 모니터링하여 ESP32 로그를 확인합니다.
-6. `Ctrl + B`누르고, 위쪽 화살표 버튼 누르면 위쪽 화면으로 가고, 아래쪽 화살표 버튼 누르면 아래쪽 화면으로 갑니다.(`Ctrl + B`는 vim의 esc키 같은 느낌입니다.)
-7. minicom에서는 `Ctrl + A`누르면 명령 모드로 진입하고, `X`키를 누르면 minicom이 종료됩니다.
-8. `ps aux | grep socat`해서 나온 애들을 `kill -9 139 182 254 255`같은 명령어로 중복 실행된 socat 프로세스들을 지워주세요.
-9. 창 하나 더 만드시고, `cat /tmp/python_logs.txt`하면 파이썬 로그도 볼 수 있어요.
-10. 모든 창을 균등하게 나누고 싶을 경우: `Ctrl + B, Alt + 1`
-11. (minicom하고 python 동시에 실행하면 오류 뜨네요. 따로따로 하셔야 할 것 같습니다. 문제를 해결해볼게요.)
+1. 일단 그냥 pio device monitor 사용하시는게 나을 듯 합니다.(minicom하고 python 동시에 실행하면 오류 뜨네요. 따로따로 하셔야 할 것 같습니다. 문제를 해결해볼게요.)
+2. `tmux` 새로운 tmux 세션이 열립니다.
+3. `pkill -f "socat -d -d /dev/ttyUSB0"` `socat -d -d /dev/ttyUSB0,raw,echo=0 PTY,link=/tmp/ttyV0 &` 명령어를 입력하고 `Enter`를 한 번 더 눌러주세요. 첫 번째 창에서 socat을 실행하여 ESP32의 실제 UART 포트(/dev/ttyUSB0)를 가상 포트(/tmp/ttyV0)로 연결합니다.
+4. `python sound_receiver.py > /tmp/python_logs.txt` 첫 번째 tmux 창에서 프로그램을 실행해주세요.
+5. tmux에서 새로운 창을 열기 위해 `Ctrl + B`누르고, 그다음 `"` 키를 눌러 세션을 두 개로 분할합니다.
+6. `minicom -D /dev/ttyUSB0 -b 115200` 두 번째 tmux 창에서 실제 포트(/dev/ttyUSB0)를 minicom으로 모니터링하여 ESP32 로그를 확인합니다.
+7. `Ctrl + B`누르고, 위쪽 화살표 버튼 누르면 위쪽 화면으로 가고, 아래쪽 화살표 버튼 누르면 아래쪽 화면으로 갑니다.(`Ctrl + B`는 vim의 esc키 같은 느낌입니다.)
+8. minicom에서는 `Ctrl + A`누르면 명령 모드로 진입하고, `X`키를 누르면 minicom이 종료됩니다.
+9. `ps aux | grep socat`해서 나온 애들을 `kill -9 139 182 254 255`같은 명령어로 중복 실행된 socat 프로세스들을 지워주세요.
+10. 창 하나 더 만드시고, `cat /tmp/python_logs.txt`하면 파이썬 로그도 볼 수 있어요.
+11. 모든 창을 균등하게 나누고 싶을 경우: `Ctrl + B, Alt + 1`
 
 ## 포트가 잠겼을 때
 
