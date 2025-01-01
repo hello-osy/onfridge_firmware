@@ -29,6 +29,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     nano \
     vim \
     gcc \
+    tmux \
+    minicom \
+    socat \
+    lsof \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
