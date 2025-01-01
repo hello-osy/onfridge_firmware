@@ -20,6 +20,11 @@ WAIT_TIME = 2  # ESP32 데이터 준비 대기 시간 (초)
 try:
     # UART 연결 설정
     ser = serial.Serial(port=port, baudrate=baud_rate, timeout=10)  # timeout 10초로 설정
+    
+    # USB 포트가 닫힐 때 리셋되지 않도록
+    ser.dtr = False  # DTR 플래그 비활성화
+    ser.rts = False  # RTS 플래그 비활성화
+    
     print(f"Connected to {port} at {baud_rate} baud.")
 
     # ESP32에 START_RECORDING 명령 전송
@@ -73,7 +78,9 @@ except Exception as e:
     # 예외 처리
     print(f"Error: {e}")
 finally:
-    # UART 연결 종료
+    # UART 연결 종료 전 지연
+    print("Waiting before closing port...")
+    time.sleep(2)  # 2초 대기
     if 'ser' in locals() and ser.is_open:
         ser.close()
         print(f"Disconnected from {port}.")
