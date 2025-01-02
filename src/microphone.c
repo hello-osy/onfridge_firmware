@@ -8,9 +8,10 @@
 
 #define I2S_NUM         I2S_NUM_0
 #define SAMPLE_RATE     8000
-#define DMA_BUFFER_COUNT 8
-#define I2S_BUFFER_SIZE (DMA_BUFFER_COUNT * 1024)  // I2S 데이터 처리를 위해 필요한 전체 DMA 버퍼 크기(1kb 짜리 DMA 버퍼 6개)
-#define RECORDING_SIZE  (SAMPLE_RATE * 2)         // 1초 데이터 크기
+#define DMA_BUFFER_COUNT 2
+#define I2S_BUFFER_SIZE 8000  // I2S 데이터 처리를 위해 필요한 전체 DMA 버퍼 크기
+#define RECORDING_SECONDS 5  // 녹음 시간 (초)
+#define RECORDING_SIZE  (SAMPLE_RATE * 2 * RECORDING_SECONDS)   // RECORDING_SECONDS초 데이터 크기
 #define UART_BAUD_RATE  115200
 #define UART_CHUNK_SIZE 256                       // UART 전송 청크 크기
 
@@ -22,15 +23,30 @@ static const char *TAG = "INMP441_UART";
 // ESP32(src/microphone.c): → I2S 하드웨어(ESP32) → DMA 버퍼 → UART
 // 컴퓨터(sound_receiver.py): → raw파일 → wav파일
 
-// I2S 신호는 ESP32 내부의 I2S FIFO 버퍼에 저장됩니다.
-// I2S 하드웨어의 FIFO에 저장된 데이터를 DMA가 메모리(DMA 버퍼)로 전송합니다.
-// CPU는 DMA 버퍼에서 데이터를 읽어옵니다.
-// UART는 CPU가 가져온 데이터를 외부 장치(예: PC)로 송신합니다.
 
-// I2S FIFO 버퍼에 계속 데이터가 들어오고, FIFO가 DMA 버퍼에 데이터를 필요한 만큼 나눠서 채워주는 구조입니다.
-// I2S FIFO 버퍼는 ESP32에서는 약 512바이트입니다.
-// DMA 버퍼가 1KB라면 FIFO는 512바이트를 두 번 전송하여 DMA 버퍼를 채웁니다.
-// DMA 버퍼가 512바이트라면 CPU는 512바이트마다 데이터를 읽어야 하지만, 1KB라면 1024바이트마다 읽으면 됩니다.
+// **I2S 데이터 흐름**:
+// 1. I2S 신호는 ESP32 내부의 I2S FIFO 버퍼(512바이트)에 저장됩니다.
+// 2. I2S 하드웨어가 FIFO 데이터를 DMA 버퍼로 전송합니다.
+// 3. DMA 버퍼는 SRAM에 위치하며, 필요한 만큼의 데이터를 수집합니다.
+// 4. CPU가 DMA 버퍼에서 데이터를 읽어 UART로 전송합니다.
+
+// **DMA와 FIFO 관계**:
+// - FIFO 크기는 ESP32에서 약 512바이트입니다.
+// - DMA 버퍼 크기는 설정에 따라 다르며, 예를 들어 1KB로 설정하면 FIFO 데이터를 두 번 채워야 DMA 버퍼가 꽉 찹니다.
+// - FIFO 크기보다 DMA 버퍼 크기가 크면 CPU가 데이터를 읽는 빈도를 줄일 수 있어 효율적입니다.
+
+// **UART 데이터 흐름**:
+// 1. CPU는 DMA 버퍼에서 데이터를 읽고, UART 하드웨어로 전송합니다.
+// 2. UART 하드웨어는 송신 FIFO를 통해 데이터를 송출하며, 외부 장치(예: PC)에서 수신됩니다.
+
+// **메모리 할당**:
+// - `record_and_send_audio` 함수는 녹음 데이터를 저장하기 위해 SRAM에서 DMA 버퍼 크기에 따라 동적으로 메모리를 할당합니다.
+// - ESP32의 SRAM은 약 520KB이며, 시스템과 애플리케이션에 의해 공유되므로 적절한 메모리 관리가 필요합니다.
+
+// **UART 수신 버퍼**:
+// - `uart_driver_install()` 함수의 수신 버퍼는 SRAM에 위치합니다.
+// - 이 버퍼는 UART로 수신된 데이터를 임시로 저장하며, 애플리케이션에서 읽을 때까지 유지됩니다.
+// - 수신 버퍼 크기는 시스템 메모리 상태와 데이터 처리 요구 사항에 맞게 조정해야 합니다.
 
 void i2s_init(i2s_chan_handle_t *i2s_rx_channel) {
     i2s_chan_config_t chan_cfg = {
@@ -76,48 +92,75 @@ void uart_init() {
         .stop_bits = UART_STOP_BITS_1,
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE
     };
-    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_0, 16384, 0, 0, NULL, 0));
+    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_0, 17000, 0, 0, NULL, 0)); //16000+여유 공간
     ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config));
     ESP_LOGI(TAG, "UART initialized successfully.");
 }
 
 void record_and_send_audio(i2s_chan_handle_t i2s_rx_channel) {
-    uint8_t *audio_buffer = malloc(RECORDING_SIZE);
-    if (!audio_buffer) {
+    uint8_t *buffer_a = malloc(I2S_BUFFER_SIZE);
+    uint8_t *buffer_b = malloc(I2S_BUFFER_SIZE);
+
+    if (!buffer_a || !buffer_b) {
         ESP_LOGE(TAG, "Memory allocation failed.");
-        return;  // 재부팅 대신 함수 종료
+        if (buffer_a) free(buffer_a);
+        if (buffer_b) free(buffer_b);
+        return;
     }
 
-    size_t total_bytes = 0, bytes_read = 0;
+    uint8_t *current_buffer = buffer_a;
+    uint8_t *send_buffer = buffer_b;
 
-    // I2S로 오디오 데이터 읽기
-    while (total_bytes < RECORDING_SIZE) {
-        ESP_ERROR_CHECK(i2s_channel_read(i2s_rx_channel, audio_buffer + total_bytes, I2S_BUFFER_SIZE, &bytes_read, portMAX_DELAY));
-        total_bytes += bytes_read;
+    size_t bytes_read = 0;
+
+    ESP_LOGI(TAG, "Starting %d seconds recording.", RECORDING_SECONDS);
+
+    for (int second = 0; second < RECORDING_SECONDS; second++) {
+        // START 전송
+        uart_write_bytes(UART_NUM_0, "<DATA_START>", strlen("<DATA_START>"));
+        
+        // 첫 번째 버퍼 데이터 읽기 및 전송
+        ESP_ERROR_CHECK(i2s_channel_read(i2s_rx_channel, current_buffer, I2S_BUFFER_SIZE, &bytes_read, portMAX_DELAY));
+        if (bytes_read < I2S_BUFFER_SIZE) {
+            ESP_LOGW(TAG, "Incomplete I2S read for buffer: Expected %d bytes, got %d bytes.", I2S_BUFFER_SIZE, bytes_read);
+        }
+        uart_write_bytes(UART_NUM_0, (const char *)current_buffer, bytes_read);
+
+        // 버퍼 스왑
+        uint8_t *temp = current_buffer;
+        current_buffer = send_buffer;
+        send_buffer = temp;
+
+        // 두 번째 버퍼 데이터 읽기 및 전송
+        ESP_ERROR_CHECK(i2s_channel_read(i2s_rx_channel, current_buffer, I2S_BUFFER_SIZE, &bytes_read, portMAX_DELAY));
+        if (bytes_read < I2S_BUFFER_SIZE) {
+            ESP_LOGW(TAG, "Incomplete I2S read for buffer: Expected %d bytes, got %d bytes.", I2S_BUFFER_SIZE, bytes_read);
+        }
+        uart_write_bytes(UART_NUM_0, (const char *)current_buffer, bytes_read);
+
+        // END 전송
+        uart_write_bytes(UART_NUM_0, "<DATA_END>", strlen("<DATA_END>"));
+
+        ESP_LOGI(TAG, "Finished sending data for second %d.", second + 1);
     }
 
-    // UART로 데이터 전송
-    ESP_LOGI(TAG, "Sending %d bytes via UART", total_bytes);
-    uart_write_bytes(UART_NUM_0, "<DATA_START>", strlen("<DATA_START>"));
-    for (size_t i = 0; i < total_bytes; i += UART_CHUNK_SIZE) {
-        size_t chunk_size = (total_bytes - i > UART_CHUNK_SIZE) ? UART_CHUNK_SIZE : total_bytes - i;
-        uart_write_bytes(UART_NUM_0, (const char *)(audio_buffer + i), chunk_size);
-        vTaskDelay(pdMS_TO_TICKS(100)); // 100ms 지연
-    }
-    uart_write_bytes(UART_NUM_0, "<DATA_END>", strlen("<DATA_END>"));
-
-    ESP_LOGI(TAG, "Data sent successfully.");
-    free(audio_buffer);
+    ESP_LOGI(TAG, "Recording and transmission completed.");
+    free(buffer_a);
+    free(buffer_b);
 }
+
 
 void app_main() {
     i2s_chan_handle_t i2s_rx_channel;
     i2s_init(&i2s_rx_channel);
     uart_init();
 
+    esp_log_level_set("*", ESP_LOG_NONE); //모든 로그가 출력되지 않도록 함.(esp초기화 로그 때문에 녹음 시작 명령어가 묻힘.)
+    uart_flush(UART_NUM_0);               // UART 버퍼 비우기
+
     char uart_command[32];
     while (1) {
-        memset(uart_command, 0, sizeof(uart_command));
+        memset(uart_command, 0, sizeof(uart_command)); //uart_command 배열의 모든 바이트를 0
         int len = uart_read_bytes(UART_NUM_0, uart_command, sizeof(uart_command) - 1, portMAX_DELAY);
         if (len <= 0) {
             ESP_LOGW(TAG, "No command received.");

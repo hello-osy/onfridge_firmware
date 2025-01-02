@@ -12,14 +12,12 @@ wav_file = "received_audio.wav"  # 변환된 WAV 파일
 sample_rate = 8000  # 샘플링 속도 (ESP32 설정과 동일)
 channels = 1  # 오디오 채널 수 (모노)
 sample_width = 2  # 샘플 크기 (16비트)
-buffer_size = sample_rate * sample_width  # 1초 데이터 (16KB)
-
-MAX_RETRIES = 3  # 데이터 수신 최대 재시도 횟수
-WAIT_TIME = 2  # ESP32 데이터 준비 대기 시간 (초)
+recording_size = 5 # 녹음 시간
+buffer_size = sample_rate * sample_width * recording_size # recording_size초 데이터 (16*recording_size)KB
 
 try:
     # UART 연결 설정
-    ser = serial.Serial(port=port, baudrate=baud_rate, timeout=10)  # timeout 10초로 설정
+    ser = serial.Serial(port=port, baudrate=baud_rate, timeout=5)
     
     # USB 포트가 닫힐 때 리셋되지 않도록
     ser.dtr = False  # DTR 플래그 비활성화
@@ -29,36 +27,69 @@ try:
 
     # ESP32에 START_RECORDING 명령 전송
     command = "START_RECORDING\n"
-    for attempt in range(MAX_RETRIES):
-        ser.write(command.encode())
-        print(f"Command sent to ESP32: {command.strip()} (Attempt {attempt + 1})")
-        
-        # ESP32 데이터 준비 대기
-        time.sleep(WAIT_TIME)
-        print("Waiting for data...")
-        
-        # ESP32로부터 데이터 수신
-        received_data = ser.read_until(b"<DATA_END>")
-        if b"<DATA_START>" in received_data:
-            # 시작 및 종료 태그 제거
-            start_index = received_data.find(b"<DATA_START>") + len(b"<DATA_START>")
-            end_index = received_data.find(b"<DATA_END>")
-            received_data = received_data[start_index:end_index]
-            break  # 성공적으로 데이터 수신 시 루프 종료
-        else:
-            print(f"Attempt {attempt + 1} failed. Retrying...")
-    else:
-        raise RuntimeError("Failed to receive valid data after maximum retries.")
     
-    print(f"Received {len(received_data)} bytes from ESP32.")
-    if len(received_data) == 0:
-        print("Warning: No data received. Check UART connection.")
+    # ESP32로부터 데이터 수신
+    received_data = b""
 
-    # 데이터가 충분하지 않으면 0으로 패딩
+    # 첫 번째 유효 데이터 수신 대기
+    while True:  # 정상적인 데이터 수신 전까지 계속 명령 전송
+        ser.write(command.encode())
+        print(f"Command sent to ESP32: {command.strip()}")
+        
+        # <DATA_START> 태그가 포함된 데이터 수신 대기
+        chunk = ser.read_until(b"<DATA_END>")
+        if b"<DATA_START>" in chunk and b"<DATA_END>" in chunk:
+            print("Valid data start detected, recording initial data...")
+            
+            # 첫 태그 사이 데이터 추출 및 기록
+            start_index = chunk.find(b"<DATA_START>") + len(b"<DATA_START>")
+            end_index = chunk.find(b"<DATA_END>")
+            initial_data = chunk[start_index:end_index]
+            received_data += initial_data
+            print(f"Initial data recorded: {len(initial_data)} bytes")
+            break
+        else:
+            print(f"No valid data start received, retrying...\nRaw chunk: {chunk}")
+            time.sleep(1)  # 1초 대기 후 명령 재전송
+
+    # 5초 동안 추가 데이터 수신
+    for second in range(recording_size - 1):  # 이미 1초 데이터 기록됨, 나머지 4초 처리
+        print(f"Waiting for data for second {second + 2}...")
+        while True:
+            chunk = ser.read_until(b"<DATA_END>")  # <DATA_END>까지 읽기
+            if b"<DATA_START>" in chunk and b"<DATA_END>" in chunk:
+                # 유효한 데이터 추출
+                start_index = chunk.find(b"<DATA_START>") + len(b"<DATA_START>")
+                end_index = chunk.find(b"<DATA_END>")
+                data_chunk = chunk[start_index:end_index]
+
+                # 데이터 크기 검증
+                if len(data_chunk) > 0:
+                    received_data += data_chunk
+                    print(f"Received data for second {second + 2}: {len(data_chunk)} bytes")
+                    break
+                else:
+                    print(f"Empty data received for second {second + 2}, retrying...")
+            else:
+                # 무효한 데이터 무시
+                if b"<DATA_END>" not in chunk:
+                    print(f"Invalid data received (missing <DATA_END>): {chunk}")
+                elif b"<DATA_START>" not in chunk:
+                    print(f"Invalid data received (missing <DATA_START>): {chunk}")
+                else:
+                    print(f"Unknown invalid data: {chunk}")
+            # 재시도 간 짧은 대기
+            time.sleep(0.1)
+
+
+    # 데이터 크기 확인 및 보정
     if len(received_data) < buffer_size:
         padding_size = buffer_size - len(received_data)
-        print(f"Warning: Incomplete data received. Padding {padding_size} bytes with zeros.")
         received_data += b'\x00' * padding_size
+        print(f"Padding with zeros: {padding_size} bytes")
+    elif len(received_data) > buffer_size:
+        received_data = received_data[:buffer_size]
+        print(f"Truncating excess data")
 
     # 수신된 데이터를 RAW 파일로 저장
     with open(raw_file, "wb") as raw:
@@ -78,9 +109,5 @@ except Exception as e:
     # 예외 처리
     print(f"Error: {e}")
 finally:
-    # UART 연결 종료 전 지연
-    print("Waiting before closing port...")
-    time.sleep(2)  # 2초 대기
-    if 'ser' in locals() and ser.is_open:
-        ser.close()
-        print(f"Disconnected from {port}.")
+    ser.close()
+    print(f"Disconnected from {port}.")
