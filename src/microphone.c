@@ -7,7 +7,7 @@
 #include "esp_system.h"
 
 #define I2S_NUM         I2S_NUM_0
-#define SAMPLE_RATE     8000
+#define SAMPLE_RATE     16000
 #define DMA_BUFFER_COUNT 2
 #define I2S_BUFFER_SIZE 8000  // I2S 데이터 처리를 위해 필요한 전체 DMA 버퍼 크기
 #define RECORDING_SECONDS 5  // 녹음 시간 (초)
@@ -92,7 +92,7 @@ void uart_init() {
         .stop_bits = UART_STOP_BITS_1,
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE
     };
-    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_0, 17000, 0, 0, NULL, 0)); //16000+여유 공간
+    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_0, 33000, 0, 0, NULL, 0)); //32000+여유 공간
     ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config));
     ESP_LOGI(TAG, "UART initialized successfully.");
 }
@@ -119,24 +119,23 @@ void record_and_send_audio(i2s_chan_handle_t i2s_rx_channel) {
         // START 전송
         uart_write_bytes(UART_NUM_0, "<DATA_START>", strlen("<DATA_START>"));
         
-        // 첫 번째 버퍼 데이터 읽기 및 전송
-        ESP_ERROR_CHECK(i2s_channel_read(i2s_rx_channel, current_buffer, I2S_BUFFER_SIZE, &bytes_read, portMAX_DELAY));
-        if (bytes_read < I2S_BUFFER_SIZE) {
-            ESP_LOGW(TAG, "Incomplete I2S read for buffer: Expected %d bytes, got %d bytes.", I2S_BUFFER_SIZE, bytes_read);
-        }
-        uart_write_bytes(UART_NUM_0, (const char *)current_buffer, bytes_read);
+        // 각 버퍼를 처리하는 반복문(1초 분량 채울 때까지 버퍼 스왑 계속 ㄱㄱ)
+        for (int buffer_index = 0; buffer_index < 4; buffer_index++) {
+            // I2S에서 데이터 읽기
+            ESP_ERROR_CHECK(i2s_channel_read(i2s_rx_channel, current_buffer, I2S_BUFFER_SIZE, &bytes_read, portMAX_DELAY));
+            if (bytes_read < I2S_BUFFER_SIZE) {
+                ESP_LOGW(TAG, "Incomplete I2S read for buffer %d: Expected %d bytes, got %d bytes.", 
+                        buffer_index + 1, I2S_BUFFER_SIZE, bytes_read);
+            }
+            // UART로 데이터 전송
+            uart_write_bytes(UART_NUM_0, (const char *)current_buffer, bytes_read);
 
-        // 버퍼 스왑
-        uint8_t *temp = current_buffer;
-        current_buffer = send_buffer;
-        send_buffer = temp;
-
-        // 두 번째 버퍼 데이터 읽기 및 전송
-        ESP_ERROR_CHECK(i2s_channel_read(i2s_rx_channel, current_buffer, I2S_BUFFER_SIZE, &bytes_read, portMAX_DELAY));
-        if (bytes_read < I2S_BUFFER_SIZE) {
-            ESP_LOGW(TAG, "Incomplete I2S read for buffer: Expected %d bytes, got %d bytes.", I2S_BUFFER_SIZE, bytes_read);
+            // 버퍼 스왑
+            uint8_t *temp = current_buffer;
+            current_buffer = send_buffer;
+            send_buffer = temp;
         }
-        uart_write_bytes(UART_NUM_0, (const char *)current_buffer, bytes_read);
+
 
         // END 전송
         uart_write_bytes(UART_NUM_0, "<DATA_END>", strlen("<DATA_END>"));
