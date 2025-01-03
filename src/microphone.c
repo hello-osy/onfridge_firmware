@@ -7,13 +7,13 @@
 #include "esp_system.h"
 
 #define I2S_NUM         I2S_NUM_0
-#define SAMPLE_RATE     8000
+#define SAMPLE_RATE     16000
 #define DMA_BUFFER_COUNT 2
-#define I2S_BUFFER_SIZE 2000  // I2S 데이터 처리를 위해 필요한 전체 DMA 버퍼 크기
+#define I2S_BUFFER_SIZE 4000  // I2S 데이터 처리를 위해 필요한 전체 DMA 버퍼 크기
 #define RECORDING_SECONDS 5  // 녹음 시간 (초)
 #define RECORDING_SIZE  (SAMPLE_RATE * 2 * RECORDING_SECONDS)   // RECORDING_SECONDS초 데이터 크기
-#define UART_BAUD_RATE  230400
-#define UART_CHUNK_SIZE 500                       // UART 전송 청크 크기
+#define UART_BAUD_RATE  460800
+#define UART_CHUNK_SIZE 1000                       // UART 전송 청크 크기
 
 static const char *TAG = "INMP441_UART";
 
