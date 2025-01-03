@@ -4,12 +4,12 @@ import time
 
 # UART 및 파일 설정
 port = '/dev/ttyUSB0'  # ESP32와 연결된 포트
-baud_rate = 115200  # ESP32와 동일한 UART 설정
+baud_rate = 230400  # ESP32와 동일한 UART 설정
 raw_file = "received_audio.raw"  # 수신된 데이터를 저장할 RAW 파일
 wav_file = "received_audio.wav"  # 변환된 WAV 파일
 
 # WAV 설정
-sample_rate = 16000  # 샘플링 속도 (ESP32 설정과 동일)
+sample_rate = 8000  # 샘플링 속도 (ESP32 설정과 동일)
 channels = 1  # 오디오 채널 수 (모노)
 sample_width = 2  # 샘플 크기 (16비트)
 recording_size = 5 # 녹음 시간

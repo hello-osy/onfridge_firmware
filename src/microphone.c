@@ -7,13 +7,13 @@
 #include "esp_system.h"
 
 #define I2S_NUM         I2S_NUM_0
-#define SAMPLE_RATE     16000
+#define SAMPLE_RATE     8000
 #define DMA_BUFFER_COUNT 2
-#define I2S_BUFFER_SIZE 8000  // I2S 데이터 처리를 위해 필요한 전체 DMA 버퍼 크기
+#define I2S_BUFFER_SIZE 2000  // I2S 데이터 처리를 위해 필요한 전체 DMA 버퍼 크기
 #define RECORDING_SECONDS 5  // 녹음 시간 (초)
 #define RECORDING_SIZE  (SAMPLE_RATE * 2 * RECORDING_SECONDS)   // RECORDING_SECONDS초 데이터 크기
-#define UART_BAUD_RATE  115200
-#define UART_CHUNK_SIZE 256                       // UART 전송 청크 크기
+#define UART_BAUD_RATE  230400
+#define UART_CHUNK_SIZE 500                       // UART 전송 청크 크기
 
 static const char *TAG = "INMP441_UART";
 
@@ -92,9 +92,26 @@ void uart_init() {
         .stop_bits = UART_STOP_BITS_1,
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE
     };
-    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_0, 33000, 0, 0, NULL, 0)); //32000+여유 공간
+    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_0, SAMPLE_RATE*2+1000, 0, 0, NULL, 0)); //SAMPLE_RATE*2+여유 공간
     ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config));
     ESP_LOGI(TAG, "UART initialized successfully.");
+}
+
+void send_uart_data(const uint8_t *data, size_t length) { //UART_CHUNK_SIZE를 활용하여 데이터를 나누어 전송
+    size_t bytes_remaining = length;
+    const uint8_t *current_position = data;
+
+    while (bytes_remaining > 0) {
+        // 남은 데이터 중 한 번에 보낼 크기 결정
+        size_t chunk_size = (bytes_remaining > UART_CHUNK_SIZE) ? UART_CHUNK_SIZE : bytes_remaining;
+
+        // UART로 데이터 전송
+        uart_write_bytes(UART_NUM_0, (const char *)current_position, chunk_size);
+
+        // 포인터 이동 및 남은 데이터 크기 감소
+        current_position += chunk_size;
+        bytes_remaining -= chunk_size;
+    }
 }
 
 void record_and_send_audio(i2s_chan_handle_t i2s_rx_channel) {
@@ -120,7 +137,7 @@ void record_and_send_audio(i2s_chan_handle_t i2s_rx_channel) {
         uart_write_bytes(UART_NUM_0, "<DATA_START>", strlen("<DATA_START>"));
         
         // 각 버퍼를 처리하는 반복문(1초 분량 채울 때까지 버퍼 스왑 계속 ㄱㄱ)
-        for (int buffer_index = 0; buffer_index < 4; buffer_index++) {
+        for (int buffer_index = 0; buffer_index < 8; buffer_index++) {
             // I2S에서 데이터 읽기
             ESP_ERROR_CHECK(i2s_channel_read(i2s_rx_channel, current_buffer, I2S_BUFFER_SIZE, &bytes_read, portMAX_DELAY));
             if (bytes_read < I2S_BUFFER_SIZE) {
@@ -128,7 +145,7 @@ void record_and_send_audio(i2s_chan_handle_t i2s_rx_channel) {
                         buffer_index + 1, I2S_BUFFER_SIZE, bytes_read);
             }
             // UART로 데이터 전송
-            uart_write_bytes(UART_NUM_0, (const char *)current_buffer, bytes_read);
+            send_uart_data(current_buffer, bytes_read);
 
             // 버퍼 스왑
             uint8_t *temp = current_buffer;
@@ -148,13 +165,12 @@ void record_and_send_audio(i2s_chan_handle_t i2s_rx_channel) {
     free(buffer_b);
 }
 
-
 void app_main() {
     i2s_chan_handle_t i2s_rx_channel;
     i2s_init(&i2s_rx_channel);
     uart_init();
 
-    esp_log_level_set("*", ESP_LOG_NONE); //모든 로그가 출력되지 않도록 함.(esp초기화 로그 때문에 녹음 시작 명령어가 묻힘.)
+    esp_log_level_set("*", ESP_LOG_NONE); //모든 로그가 출력되지 않도록 함.
     uart_flush(UART_NUM_0);               // UART 버퍼 비우기
 
     char uart_command[32];
