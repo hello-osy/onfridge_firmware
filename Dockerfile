@@ -40,13 +40,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN git clone -b v5.3.1 --recursive https://github.com/espressif/esp-idf.git /esp-idf
 RUN /esp-idf/install.sh
 
+# TensorFlow Lite Micro 소스코드 클론 및 설치
+RUN git clone https://github.com/tensorflow/tflite-micro.git /esp-tflite-micro
+
 # PlatformIO 설치
 RUN pip install --no-cache-dir platformio
-
 
 # ESP-IDF 환경 변수 추가
 ENV PATH="/esp-idf/tools:$PATH"
 ENV IDF_PATH="/esp-idf"
+
+# TensorFlow Lite Micro 경로 환경 변수 추가
+ENV TFLITE_MICRO_PATH="/esp-tflite-micro"
 
 # Python 의존성 복사 및 설치
 COPY requirements.txt .
