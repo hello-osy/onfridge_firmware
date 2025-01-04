@@ -41,7 +41,17 @@ RUN git clone -b v5.3.1 --recursive https://github.com/espressif/esp-idf.git /es
 RUN /esp-idf/install.sh
 
 # TensorFlow Lite Micro 소스코드 클론 및 설치
-RUN git clone https://github.com/tensorflow/tflite-micro.git /esp-tflite-micro
+RUN git clone --recurse-submodules https://github.com/tensorflow/tflite-micro.git /app/components/tflite_micro
+
+# FlatBuffers 다운로드 및 빌드
+RUN git clone https://github.com/google/flatbuffers.git /app/components/flatbuffers && \
+    cd /app/components/flatbuffers && \
+    cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DFLATBUFFERS_BUILD_TESTS=OFF . && \
+    make && \
+    make install
+
+# FlatBuffers 헤더 파일 경로 설정
+ENV FLATBUFFERS_INCLUDE_PATH="/app/components/flatbuffers/include"
 
 # PlatformIO 설치
 RUN pip install --no-cache-dir platformio
@@ -49,9 +59,6 @@ RUN pip install --no-cache-dir platformio
 # ESP-IDF 환경 변수 추가
 ENV PATH="/esp-idf/tools:$PATH"
 ENV IDF_PATH="/esp-idf"
-
-# TensorFlow Lite Micro 경로 환경 변수 추가
-ENV TFLITE_MICRO_PATH="/esp-tflite-micro"
 
 # Python 의존성 복사 및 설치
 COPY requirements.txt .

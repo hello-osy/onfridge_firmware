@@ -109,6 +109,8 @@ docker system prune -a --volumes
 ```
 docker cp ./sound_receiver.py onfridge_firmware_container:/app/sound_receiver.py
 docker cp ./src/microphone.c onfridge_firmware_container:/app/src/microphone.c
+docker cp ./src/wake_word.cpp onfridge_firmware_container:/app/src/wake_word.cpp
+docker cp ./src/tflite_model.h onfridge_firmware_container:/app/src/tflite_model.h 
 ```
 
 - 컨테이너 진입
@@ -257,7 +259,7 @@ pio device list
 ## 웨이크 워드 구현
 
 1. '리지야' 음성 데이터 및 다른 음성 데이터 수집
-2. Tensorflow로 음성 구분 모델 훈련
+2. Tensorflow로 음성 구분 모델 훈련(구글 드라이브 공유 폴더: https://drive.google.com/drive/folders/1fxsOHjfCKM9QRMNyvALZ_kBjqtpUxxxc?usp=sharing )
 3. 훈련된 모델을 c배열로 바꾸고 헤더파일로 만들어서, .c파일에서 가져다가 쓰도록 만들어준다.
 4. 최적화 및 테스트(Low-pass Filter, Moving Average Filter, 저전력 모드, Threshold 값 조정, 다양한 배경 소음에서 웨이크 워드 테스트)
 

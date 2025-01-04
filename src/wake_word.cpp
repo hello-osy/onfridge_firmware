@@ -1,7 +1,7 @@
-#include "tflite_model.h"  // 변환된 헤더 파일
-#include "tensorflow/lite/micro/all_ops_resolver.h"  // TensorFlow Lite Micro에서 지원하는 모든 연산자(op)를 등록함.
-#include "tensorflow/lite/micro/micro_interpreter.h" // TensorFlow Lite Micro 인터프리터를 정의하는 헤더 파일. 모델 데이터를 실행하고, 입력/출력 텐서를 관리함.
-#include "tensorflow/lite/schema/schema_generated.h" // TensorFlow Lite 모델의 스키마 정의를 포함하는 헤더 파일. 모델의 버전 및 구조를 확인함.
+#include "wake_word_model.h"  // 변환된 헤더 파일
+#include "micro_mutable_op_resolver.h"  // 필요한 연산자만 등록할 수 있음.
+#include "micro_interpreter.h" // TensorFlow Lite Micro 인터프리터를 정의하는 헤더 파일. 모델 데이터를 실행하고, 입력/출력 텐서를 관리함.
+#include "schema_generated.h" // TensorFlow Lite 모델의 스키마 정의를 포함하는 헤더 파일. 모델의 버전 및 구조를 확인함.
 
 #include "driver/i2s_std.h" // I2S (마이크 입력 처리)를 위한 ESP32 드라이버.
 #include "esp_log.h"  // ESP32 로깅 유틸리티.
@@ -64,7 +64,12 @@ void tflm_init() {
         return;
     }
 
-    static tflite::AllOpsResolver resolver;
+    // 필요한 연산자만 등록
+    static tflite::MicroMutableOpResolver<3> resolver;  // 최대 3개의 연산자 등록 가능
+    resolver.AddFullyConnected();
+    resolver.AddSoftmax();
+    resolver.AddConv2D();  // 필요한 경우 다른 연산자 추가 가능
+    
     static tflite::MicroInterpreter static_interpreter(model, resolver, tensor_arena, TENSOR_ARENA_SIZE, nullptr);
     interpreter = &static_interpreter;
 
