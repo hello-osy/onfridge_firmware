@@ -1,6 +1,14 @@
-idf_component_register(SRCS 
-    "microphone.c"
-    #"speaker.c"
-    INCLUDE_DIRS ".")
+idf_component_register(
+    SRCS
+        #"microphone.c"
+        #"speaker.c"
+        "wake_word.cpp"
+    INCLUDE_DIRS "."
+)
+# 빌드 안 할 파일 왼쪽에 #붙이면 주석으로 처리됩니다.
 
-#안 쓰는 파일은 왼쪽에 #붙이면 됨.
+# C++ 컴파일러를 사용할 파일 설정
+set_source_files_properties(
+    "wake_word.cpp"
+    PROPERTIES LANGUAGE CXX
+)

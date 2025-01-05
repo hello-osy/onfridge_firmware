@@ -109,6 +109,8 @@ docker system prune -a --volumes
 ```
 docker cp ./sound_receiver.py onfridge_firmware_container:/app/sound_receiver.py
 docker cp ./src/microphone.c onfridge_firmware_container:/app/src/microphone.c
+docker cp ./src/wake_word.cpp onfridge_firmware_container:/app/src/wake_word.cpp
+docker cp ./src/wake_word_model.h onfridge_firmware_container:/app/src/wake_word_model.h
 ```
 
 - 컨테이너 진입
@@ -254,6 +256,13 @@ pio device list
 
 2. `kill -9 1234` 위 출력에서 확인한 PID를 종료합니다. 1234는 실제 점유 중인 프로세스의 PID로 변경하세요.
 
+## 웨이크 워드 구현
+
+1. '리지야' 음성 데이터 및 다른 음성 데이터 수집
+2. Tensorflow로 음성 구분 모델 훈련(구글 드라이브 공유 폴더: https://drive.google.com/drive/folders/1fxsOHjfCKM9QRMNyvALZ_kBjqtpUxxxc?usp=sharing )
+3. 훈련된 모델을 c배열로 바꾸고 헤더파일로 만들어서, .c파일에서 가져다가 쓰도록 만들어준다.
+4. 최적화 및 테스트(Low-pass Filter, Moving Average Filter, 저전력 모드, Threshold 값 조정, 다양한 배경 소음에서 웨이크 워드 테스트)
+
 ## 참고 사항
 
 1. 특정 파일만 빌드해서 업로드하고 싶으면 src/CMakeLists.txt파일을 수정하면 됩니다.
@@ -283,3 +292,4 @@ echo "10c4 ea60" | tee /sys/bus/usb-serial/drivers/cp210x/new_id
 8. usb를 뺐다가 꽂을 때마다, `usbipd attach --busid 1-1 --wsl`명령어를 입력하고, 호스트(컨테이너 밖) 터미널에서, `wsl`입력해서 wsl접속한 다음, `modprobe cp210x`명령어를 입력하고 나서 `exit`해야 합니다. 그래야 docker container에서 esp32 개발 보드를 인식할 수 있습니다.(usb 선은 웬만하면 뽑지 않는 것이 좋을 것 같습니다.)
 9. 도커 컨테이너 내에서 vim 또는 nano로 개발할 수도 있습니다. 개발하신 내용을 호스트에도(컨테이너 밖) 반영해서 git으로 공유해주세요~
 10. `pio run -t upload`하면 알아서 컴파일하고 업로드하는 것입니다. 따로 컴파일할 필요가 없습니다.
+11. 마음대로 CMakeLists.txt를 만들다보면, 이미 잘 만들어져있던 CMakeLists.txt에 덮어쓰기 되면서 문제가 생길 수 있습니다.(git clone해서 가져온 CMakeLists.txt가 덮어쓰기 되면서 사라짐.)
