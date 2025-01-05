@@ -44,7 +44,6 @@ RUN /esp-idf/install.sh
 # ESP-IDF 환경 변수 추가
 ENV IDF_PATH="/esp-idf"
 ENV PATH="${IDF_PATH}/tools:$PATH"
-RUN echo "source ${IDF_PATH}/export.sh" >> /root/.bashrc
 
 # TensorFlow Lite Micro 소스코드 클론 및 설치
 RUN git clone --recurse-submodules https://github.com/espressif/esp-tflite-micro.git /app/components/esp-tflite-micro
@@ -63,10 +62,7 @@ COPY . /app
 # 스크립트를 복사하고 실행 권한 부여
 RUN dos2unix /app/scripts/set_new_id.sh && chmod +x /app/scripts/set_new_id.sh
 
-# 컨테이너가 시작될 때 ESP-IDF 환경 설정 활성화
-SHELL ["/bin/bash", "-c"]
 
 # 컨테이너가 시작될 때마다 스크립트를 실행하도록 설정
-CMD ["bash", "-c", "source ${IDF_PATH}/export.sh && /app/scripts/set_new_id.sh && exec bash"]
-#CMD ["/app/scripts/set_new_id.sh"]
+CMD ["/app/scripts/set_new_id.sh"]
 #CMD ["bash"]

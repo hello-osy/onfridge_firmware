@@ -1,15 +1,10 @@
-#CMake 최소 요구 버전 설정
-cmake_minimum_required(VERSION 3.16.0)
+cmake_minimum_required(VERSION 3.16)
 
-# 프로젝트 이름을 "onfridge_firmware"로 설정
+# Include ESP-IDF project configuration
+include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+
+# Define the project name
 project(onfridge_firmware)
 
-# Include src directory
-add_subdirectory(src)
-
-# Register the component
-idf_component_register(
-    SRCS ${SRC_FILES}  # Use variable defined in src/CMakeLists.txt
-    INCLUDE_DIRS "components/esp-tflite-micro/include"
-    REQUIRES esp_timer nvs_flash
-)
+# 추가 컴포넌트 디렉토리 설정
+set(EXTRA_COMPONENT_DIRS "/app/components/esp-tflite-micro")

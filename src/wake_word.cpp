@@ -1,8 +1,8 @@
 #include "wake_word_model.h"  // 변환된 헤더 파일
-#include "micro_mutable_op_resolver.h"  // 필요한 연산자만 등록할 수 있음.
-#include "micro_interpreter.h" // TensorFlow Lite Micro 인터프리터를 정의하는 헤더 파일. 모델 데이터를 실행하고, 입력/출력 텐서를 관리함.
-#include "schema_generated.h" // TensorFlow Lite 모델의 스키마 정의를 포함하는 헤더 파일. 모델의 버전 및 구조를 확인함.
-#include "micro_log.h"
+#include "tensorflow/lite/micro/micro_mutable_op_resolver.h"  // 필요한 연산자만 등록할 수 있음.
+#include "tensorflow/lite/micro/micro_interpreter.h" // TensorFlow Lite Micro 인터프리터를 정의하는 헤더 파일. 모델 데이터를 실행하고, 입력/출력 텐서를 관리함.
+#include "tensorflow/lite/schema/schema_generated.h" // TensorFlow Lite 모델의 스키마 정의를 포함하는 헤더 파일. 모델의 버전 및 구조를 확인함.
+#include "tensorflow/lite/micro/micro_log.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -100,7 +100,7 @@ void process_audio(i2s_chan_handle_t i2s_rx_channel) {
 
         // 입력 텐서에 데이터 복사
         for (size_t i = 0; i < bytes_read / 2; i++) {
-            input_tensor->data.f[i] = ((int16_t*)audio_buffer)[i] / 32768.0f;  // 정규화
+            input_tensor->data.f[i] = static_cast<float>(reinterpret_cast<int16_t*>(audio_buffer)[i]) / 32768.0f;  // 정규화
         }
 
         // 모델 실행
