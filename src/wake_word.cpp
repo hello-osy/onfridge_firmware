@@ -2,14 +2,17 @@
 #include "micro_mutable_op_resolver.h"  // 필요한 연산자만 등록할 수 있음.
 #include "micro_interpreter.h" // TensorFlow Lite Micro 인터프리터를 정의하는 헤더 파일. 모델 데이터를 실행하고, 입력/출력 텐서를 관리함.
 #include "schema_generated.h" // TensorFlow Lite 모델의 스키마 정의를 포함하는 헤더 파일. 모델의 버전 및 구조를 확인함.
+#include "micro_log.h"
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "driver/i2s_std.h" // I2S (마이크 입력 처리)를 위한 ESP32 드라이버.
 #include "esp_log.h"  // ESP32 로깅 유틸리티.
 #include "esp_system.h" // ESP32 시스템 관련 유틸리티.
 
 #define I2S_NUM         I2S_NUM_0
 #define SAMPLE_RATE     16000
-#define TENSOR_ARENA_SIZE 10240  // TENSOR_ARENA_SIZE->모델 실행에 필요한 메모리 공간 크기(바이트 단위)
+#define TENSOR_ARENA_SIZE 70 * 1024  // TENSOR_ARENA_SIZE->모델 실행에 필요한 메모리 공간 크기(바이트 단위)
 
 static const char *TAG = "INMP441_TFLM"; // 로깅 시 표시될 태그를 정의합니다. 디버깅 및 로깅 메시지 구분에 사용됩니다.
 
@@ -26,7 +29,7 @@ void i2s_init(i2s_chan_handle_t *i2s_rx_channel) {
         .role = I2S_ROLE_MASTER,
         .dma_desc_num = 2,
         .dma_frame_num = 512,
-        .auto_clear = true
+        .auto_clear = true,
     };
 
     ESP_ERROR_CHECK(i2s_new_channel(&chan_cfg, NULL, i2s_rx_channel));
@@ -39,15 +42,15 @@ void i2s_init(i2s_chan_handle_t *i2s_rx_channel) {
         },
         .slot_cfg = {
             .data_bit_width = I2S_DATA_BIT_WIDTH_16BIT,
-            .slot_bit_width = I2S_DATA_BIT_WIDTH_16BIT,
+            .slot_bit_width = I2S_SLOT_BIT_WIDTH_16BIT,
             .slot_mode = I2S_SLOT_MODE_MONO,
             .slot_mask = I2S_STD_SLOT_LEFT
         },
         .gpio_cfg = {
-            .bclk = 14,  // BCLK 핀
-            .ws = 15,    // WS 핀
+            .bclk = GPIO_NUM_14,  // BCLK 핀
+            .ws = GPIO_NUM_15,    // WS 핀
             .dout = I2S_GPIO_UNUSED,
-            .din = 32    // INMP441 SD 핀
+            .din = GPIO_NUM_32    // INMP441 SD 핀
         }
     };
 
@@ -65,10 +68,11 @@ void tflm_init() {
     }
 
     // 필요한 연산자만 등록
-    static tflite::MicroMutableOpResolver<3> resolver;  // 최대 3개의 연산자 등록 가능
+    static tflite::MicroMutableOpResolver<4> resolver;  // 최대 4개의 연산자 등록 가능
     resolver.AddFullyConnected();
     resolver.AddSoftmax();
-    resolver.AddConv2D();  // 필요한 경우 다른 연산자 추가 가능
+    resolver.AddConv2D();  // Conv2D 연산자 추가
+    resolver.AddReshape(); // Reshape 연산자 추가
     
     static tflite::MicroInterpreter static_interpreter(model, resolver, tensor_arena, TENSOR_ARENA_SIZE, nullptr);
     interpreter = &static_interpreter;
@@ -113,7 +117,7 @@ void process_audio(i2s_chan_handle_t i2s_rx_channel) {
     }
 }
 
-void app_main() {
+extern "C" void app_main(void) {
     i2s_chan_handle_t i2s_rx_channel;
 
     // I2S 및 TensorFlow Lite Micro 초기화

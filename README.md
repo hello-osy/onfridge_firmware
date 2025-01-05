@@ -110,7 +110,7 @@ docker system prune -a --volumes
 docker cp ./sound_receiver.py onfridge_firmware_container:/app/sound_receiver.py
 docker cp ./src/microphone.c onfridge_firmware_container:/app/src/microphone.c
 docker cp ./src/wake_word.cpp onfridge_firmware_container:/app/src/wake_word.cpp
-docker cp ./src/tflite_model.h onfridge_firmware_container:/app/src/tflite_model.h 
+docker cp ./src/wake_word_model.h onfridge_firmware_container:/app/src/wake_word_model.h 
 ```
 
 - 컨테이너 진입

@@ -29,6 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     nano \
     vim \
     gcc \
+    g++ \
     tmux \
     minicom \
     socat \
@@ -40,36 +41,32 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN git clone -b v5.3.1 --recursive https://github.com/espressif/esp-idf.git /esp-idf
 RUN /esp-idf/install.sh
 
+# ESP-IDF 환경 변수 추가
+ENV IDF_PATH="/esp-idf"
+ENV PATH="${IDF_PATH}/tools:$PATH"
+RUN echo "source ${IDF_PATH}/export.sh" >> /root/.bashrc
+
 # TensorFlow Lite Micro 소스코드 클론 및 설치
-RUN git clone --recurse-submodules https://github.com/tensorflow/tflite-micro.git /app/components/tflite_micro
-
-# FlatBuffers 다운로드 및 빌드
-RUN git clone https://github.com/google/flatbuffers.git /app/components/flatbuffers && \
-    cd /app/components/flatbuffers && \
-    cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DFLATBUFFERS_BUILD_TESTS=OFF . && \
-    make && \
-    make install
-
-# FlatBuffers 헤더 파일 경로 설정
-ENV FLATBUFFERS_INCLUDE_PATH="/app/components/flatbuffers/include"
+RUN git clone --recurse-submodules https://github.com/espressif/esp-tflite-micro.git /app/components/esp-tflite-micro
+RUN cd /app/components/esp-tflite-micro && git rev-parse --is-inside-work-tree || (echo "Invalid git repository" && exit 1)
 
 # PlatformIO 설치
 RUN pip install --no-cache-dir platformio
-
-# ESP-IDF 환경 변수 추가
-ENV PATH="/esp-idf/tools:$PATH"
-ENV IDF_PATH="/esp-idf"
 
 # Python 의존성 복사 및 설치
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 호스트의 모든 파일을 컨테이너로 복사
-COPY . .
+# 프로젝트 전체 복사
+COPY . /app
 
-# Windows 파일 줄 바꿈 형식 변환 및 실행 권한 추가
+# 스크립트를 복사하고 실행 권한 부여
 RUN dos2unix /app/scripts/set_new_id.sh && chmod +x /app/scripts/set_new_id.sh
 
+# 컨테이너가 시작될 때 ESP-IDF 환경 설정 활성화
+SHELL ["/bin/bash", "-c"]
+
 # 컨테이너가 시작될 때마다 스크립트를 실행하도록 설정
-CMD ["/app/scripts/set_new_id.sh"]
+CMD ["bash", "-c", "source ${IDF_PATH}/export.sh && /app/scripts/set_new_id.sh && exec bash"]
+#CMD ["/app/scripts/set_new_id.sh"]
 #CMD ["bash"]
