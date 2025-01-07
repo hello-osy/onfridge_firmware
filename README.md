@@ -131,6 +131,8 @@ docker cp onfridge_firmware_container:/app/sound_receiver.py ./sound_receiver.py
 docker cp onfridge_firmware_container:/app/src/microphone.c ./src/microphone.c
 
 docker cp onfridge_firmware_container:/app/received_audio.wav ./received_audio.wav
+
+docker cp onfridge_firmware_container:/app/.pio/build/esp32dev/onfridge_firmware.map ./onfridge_firmware.map
 ```
 
 ## 개발할 때
@@ -293,3 +295,4 @@ echo "10c4 ea60" | tee /sys/bus/usb-serial/drivers/cp210x/new_id
 9. 도커 컨테이너 내에서 vim 또는 nano로 개발할 수도 있습니다. 개발하신 내용을 호스트에도(컨테이너 밖) 반영해서 git으로 공유해주세요~
 10. `pio run -t upload`하면 알아서 컴파일하고 업로드하는 것입니다. 따로 컴파일할 필요가 없습니다.
 11. 마음대로 CMakeLists.txt를 만들다보면, 이미 잘 만들어져있던 CMakeLists.txt에 덮어쓰기 되면서 문제가 생길 수 있습니다.(git clone해서 가져온 CMakeLists.txt가 덮어쓰기 되면서 사라짐.)
+12. `vim /app/.pio/build/esp32dev/onfridge_firmware.map`
