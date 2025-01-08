@@ -296,3 +296,4 @@ echo "10c4 ea60" | tee /sys/bus/usb-serial/drivers/cp210x/new_id
 10. `pio run -t upload`하면 알아서 컴파일하고 업로드하는 것입니다. 따로 컴파일할 필요가 없습니다.
 11. 마음대로 CMakeLists.txt를 만들다보면, 이미 잘 만들어져있던 CMakeLists.txt에 덮어쓰기 되면서 문제가 생길 수 있습니다.(git clone해서 가져온 CMakeLists.txt가 덮어쓰기 되면서 사라짐.)
 12. `vim /app/.pio/build/esp32dev/onfridge_firmware.map`
+13. 웨이크 모델 훈련할 때의 정보에 맞게 코드를 짜셔야 합니다. 입력 텐서 크기, 출력 텐서 크기 등의 설정이 같아야 합니다.

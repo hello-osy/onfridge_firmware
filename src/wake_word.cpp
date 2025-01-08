@@ -12,13 +12,16 @@
 #include <iostream>
 #include <vector>
 #include <inttypes.h> // PRIu32 매크로를 사용하기 위해 필요합니다.
+#include <cmath>
+
 
 #define I2S_NUM         I2S_NUM_0
-#define SAMPLE_RATE     16000
 #define DMA_BUFFER_COUNT 2
 #define I2S_BUFFER_SIZE 4000
-#define TENSOR_ARENA_SIZE 150 * 1024
-#define INPUT_SIZE      16000  // 모델의 입력 크기 (1초)
+#define TENSOR_ARENA_SIZE 160 * 1024
+#define SAMPLE_RATE     8000  // 입력 데이터 샘플링 속도 8000Hz로 설정
+#define INPUT_SIZE      (SAMPLE_RATE * 2)  // 바이트 단위 크기(1샘플이 2바이트)
+#define INPUT_SAMPLES   SAMPLE_RATE        // 1초에 8000 샘플 (16-bit PCM)
 static const char *TAG = "WAKE_WORD"; // 로깅 시 표시될 태그를 정의합니다. 디버깅 및 로깅 메시지 구분에 사용됩니다.
 
 
@@ -57,7 +60,7 @@ static const char *TAG = "WAKE_WORD"; // 로깅 시 표시될 태그를 정의�
 
 
 // TensorFlow Lite Micro 설정
-uint8_t tensor_arena[TENSOR_ARENA_SIZE];
+__attribute__((aligned(16))) uint8_t tensor_arena[TENSOR_ARENA_SIZE]; // 텐서 아레나 메모리 정렬
 tflite::MicroInterpreter* interpreter = nullptr;
 TfLiteTensor* input_tensor = nullptr;
 TfLiteTensor* output_tensor = nullptr;
@@ -88,7 +91,7 @@ void spiffs_init() {
 }
 
 // 모델 로드
-const tflite::Model* load_model_from_spiffs(const char* model_path, size_t* model_size) {
+const tflite::Model* load_model_from_spiffs(const char* model_path) {
     ESP_LOGI(TAG, "Loading model from SPIFFS: %s", model_path);
 
     FILE* file = fopen(model_path, "rb");
@@ -98,21 +101,24 @@ const tflite::Model* load_model_from_spiffs(const char* model_path, size_t* mode
     }
 
     fseek(file, 0, SEEK_END);
-    *model_size = ftell(file); // 모델 크기 저장
+    size_t model_size = ftell(file); // 모델 크기 저장
     rewind(file);
 
-    uint8_t* model_data = static_cast<uint8_t*>(malloc(*model_size));
+    uint8_t* model_data = static_cast<uint8_t*>(malloc(model_size));
     if (!model_data) {
         ESP_LOGE(TAG, "Failed to allocate memory for model.");
         fclose(file);
         return nullptr;
     }
 
-    fread(model_data, 1, *model_size, file);
+    fread(model_data, 1, model_size, file);
     fclose(file);
 
-    ESP_LOGI(TAG, "Model loaded successfully. Size: %zu bytes", *model_size);
-    return tflite::GetModel(model_data);
+    ESP_LOGI(TAG, "Model loaded successfully. Size: %zu bytes", model_size);
+
+    const tflite::Model* model = tflite::GetModel(model_data);
+
+    return model;
 }
 
 // I2S 초기화
@@ -156,21 +162,12 @@ void i2s_init(i2s_chan_handle_t* i2s_rx_channel) {
 void tflm_init() {
     ESP_LOGI(TAG, "Initializing TensorFlow Lite Micro...");
 
-    size_t model_size = 0; // 모델 크기를 저장할 변수
-    const tflite::Model* model = load_model_from_spiffs("/spiffs/wake_word_model.tflite", &model_size);
+    const tflite::Model* model = load_model_from_spiffs("/spiffs/wake_word_model.tflite");
 
     if (!model) {
         ESP_LOGE(TAG, "Model is null! Please check the model file.");
         return;
     }
-
-    if (model->version() != TFLITE_SCHEMA_VERSION) {
-        ESP_LOGE(TAG, "Model schema version mismatch!");
-        return;
-    }
-
-    ESP_LOGI(TAG, "Model version: %" PRIu32, model->version());
-    ESP_LOGI(TAG, "Model size: %zu bytes", model_size);
 
     // 필요한 연산자만 등록
     static tflite::MicroMutableOpResolver<11> resolver;
@@ -187,94 +184,115 @@ void tflm_init() {
     static tflite::MicroInterpreter static_interpreter(model, resolver, tensor_arena, TENSOR_ARENA_SIZE, nullptr);
     interpreter = &static_interpreter;
 
-    ESP_LOGI(TAG, "Tensor arena size: %d bytes", TENSOR_ARENA_SIZE);
-    ESP_LOGI(TAG, "Free heap size before tensor allocation: %" PRIu32 " bytes", esp_get_free_heap_size());
-
-    if (interpreter->AllocateTensors() != kTfLiteOk) {
+    // 텐서 할당
+    TfLiteStatus status = interpreter->AllocateTensors();
+    if (status != kTfLiteOk) {
         ESP_LOGE(TAG, "Failed to allocate tensors!");
-        ESP_LOGI(TAG, "Tensor arena size: %d bytes", TENSOR_ARENA_SIZE);
-        ESP_LOGI(TAG, "Free heap size: %" PRIu32 " bytes", esp_get_free_heap_size());
         return;
     }
 
     input_tensor = interpreter->input(0);
     output_tensor = interpreter->output(0);
-    ESP_LOGI(TAG, "Tensor allocation successful.");
-    ESP_LOGI(TAG, "Tensor arena used: %zu bytes", interpreter->arena_used_bytes());
 
-    if (!input_tensor || !output_tensor) {
-        ESP_LOGE(TAG, "Tensor initialization failed: Input or Output tensor is null.");
+    // 입력 텐서 설정
+    input_tensor = interpreter->input(0);
+    if (input_tensor) {
+        ESP_LOGI(TAG, "Input Tensor Details:");
+        ESP_LOGI(TAG, "  Name: %s", input_tensor->name);
+        ESP_LOGI(TAG, "  Type: %d", input_tensor->type);
+        ESP_LOGI(TAG, "  Dimensions: %d", input_tensor->dims->size);
+
+        for (int i = 0; i < input_tensor->dims->size; ++i) {
+            ESP_LOGI(TAG, "    Dim %d: %d", i, input_tensor->dims->data[i]);
+        }
+
+        if (input_tensor->dims->size != 2 || input_tensor->dims->data[1] != INPUT_SAMPLES) {
+            ESP_LOGE(TAG, "Unexpected input tensor dimensions. Expected [1, %d], got [%d, %d].",
+                    INPUT_SAMPLES, input_tensor->dims->data[0], input_tensor->dims->data[1]);
+            return;
+        }
+    } else {
+        ESP_LOGE(TAG, "Input tensor is null!");
         return;
     }
+
+    // 출력 텐서 설정
+    output_tensor = interpreter->output(0);
+    if (output_tensor) {
+        ESP_LOGI(TAG, "Output Tensor Details:");
+        ESP_LOGI(TAG, "  Name: %s", output_tensor->name);
+        ESP_LOGI(TAG, "  Type: %d", output_tensor->type);
+        ESP_LOGI(TAG, "  Dimensions: %d", output_tensor->dims->size);
+
+        for (int i = 0; i < output_tensor->dims->size; ++i) {
+            ESP_LOGI(TAG, "    Dim %d: %d", i, output_tensor->dims->data[i]);
+        }
+
+        if (output_tensor->dims->size != 2 || output_tensor->dims->data[1] != 2) {
+            ESP_LOGE(TAG, "Unexpected output tensor dimensions. Expected [1, 2], got [%d, %d].",
+                    output_tensor->dims->data[0], output_tensor->dims->data[1]);
+            return;
+        }
+    } else {
+        ESP_LOGE(TAG, "Output tensor is null!");
+        return;
+    }
+
 }
 
-// I2S 데이터 처리 및 모델 실행
-void process_audio(i2s_chan_handle_t i2s_rx_channel) {
-    // 두 개의 버퍼 할당
-    std::vector<int16_t> buffer_a(INPUT_SIZE);
-    std::vector<int16_t> buffer_b(INPUT_SIZE);
+// I2S 데이터 처리 및 모델 실행 (FreeRTOS 태스크)
+void process_audio_task(void* arg) {
+    ESP_LOGI(TAG, "Starting audio processing task...");
+    i2s_chan_handle_t* i2s_rx_channel = (i2s_chan_handle_t*)arg;
 
-    int16_t* current_buffer = buffer_a.data();
-    int16_t* processing_buffer = buffer_b.data();
+    // 두 개의 버퍼 할당
+    std::vector<uint8_t> buffer(INPUT_SIZE);
+    std::vector<int16_t> samples(INPUT_SAMPLES);
 
     while (true) {
         size_t bytes_read = 0;
+        ESP_ERROR_CHECK(i2s_channel_read(*i2s_rx_channel, buffer.data(), INPUT_SIZE, &bytes_read, portMAX_DELAY));
 
-        // I2S에서 현재 버퍼로 데이터 읽기
-        ESP_ERROR_CHECK(i2s_channel_read(i2s_rx_channel, current_buffer, INPUT_SIZE * sizeof(int16_t), &bytes_read, portMAX_DELAY));
-
-        if (bytes_read != INPUT_SIZE * sizeof(int16_t)) {
-            ESP_LOGW(TAG, "Incomplete audio data read: expected %d bytes, got %d bytes.", INPUT_SIZE * sizeof(int16_t), bytes_read);
+        if (bytes_read != INPUT_SIZE) {
+            ESP_LOGW(TAG, "Incomplete audio data read.");
             continue;
         }
 
-        // 모델에 처리할 데이터를 복사
-        for (size_t i = 0; i < INPUT_SIZE; ++i) {
-            input_tensor->data.f[i] = static_cast<float>(processing_buffer[i]) / 32768.0f;
+        for (size_t i = 0; i < INPUT_SAMPLES; ++i) {
+            samples[i] = static_cast<int16_t>((buffer[2 * i + 1] << 8) | buffer[2 * i]);
+            if (i < 10) {  // 처음 10개 샘플 디버깅
+                ESP_LOGI(TAG, "Sample %d: %d", i, samples[i]);
+            }
         }
 
-        // 모델 실행
+        int8_t* input_data = input_tensor->data.int8;
+        float scale = input_tensor->params.scale;
+        int zero_point = input_tensor->params.zero_point;
+
+        for (size_t i = 0; i < INPUT_SAMPLES; ++i) {
+            input_data[i] = static_cast<int8_t>(std::round(samples[i] / 32768.0f / scale) + zero_point);
+        }
+
         if (interpreter->Invoke() != kTfLiteOk) {
             ESP_LOGE(TAG, "Failed to invoke TensorFlow Lite model.");
-        } else {
-            // 결과 확인
-            int wake_word_detected = -1;
-            float max_score = -1.0f;
-
-            for (int i = 0; i < output_tensor->dims->data[1]; ++i) {
-                float score = output_tensor->data.f[i];
-                ESP_LOGI(TAG, "Output %d: %f", i, score);
-                if (score > max_score) {
-                    max_score = score;
-                    wake_word_detected = i;
-                }
-            }
-
-            if (wake_word_detected == 1) { // 1이 웨이크 워드 감지를 나타낸다고 가정
-                ESP_LOGI(TAG, "Wake word detected!");
-            } else {
-                ESP_LOGI(TAG, "No wake word detected.");
-            }
         }
 
-        // 버퍼 스왑
-        int16_t* temp = current_buffer;
-        current_buffer = processing_buffer;
-        processing_buffer = temp;
+        for (int i = 0; i < output_tensor->dims->data[1]; ++i) {
+            float score = (output_tensor->data.int8[i] - output_tensor->params.zero_point) * output_tensor->params.scale;
+            ESP_LOGI(TAG, "Output %d: %f", i, score);
+        }
     }
 }
 
 extern "C" void app_main(void) {
-    i2s_chan_handle_t i2s_rx_channel = nullptr;;
-    ESP_LOGI(TAG, "Application started.");
+    i2s_chan_handle_t i2s_rx_channel = nullptr;
     spiffs_init();
     i2s_init(&i2s_rx_channel);
     tflm_init();
     
-    if (!input_tensor || !output_tensor) {
-        ESP_LOGE(TAG, "Tensor initialization failed.");
-        return;
+    // FreeRTOS 태스크 생성 실패 디버깅
+    if (xTaskCreatePinnedToCore(
+            process_audio_task, "Process Audio Task", 8192, &i2s_rx_channel, 5, nullptr, tskNO_AFFINITY) != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create audio processing task! Check memory allocation.");
     }
-
-    process_audio(i2s_rx_channel);
 }
