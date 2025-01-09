@@ -18,10 +18,10 @@
 #define I2S_NUM         I2S_NUM_0
 #define DMA_BUFFER_COUNT 2
 #define I2S_BUFFER_SIZE 4000
-#define TENSOR_ARENA_SIZE 160 * 1024
-#define SAMPLE_RATE     8000  // 입력 데이터 샘플링 속도 8000Hz로 설정
+#define TENSOR_ARENA_SIZE 20 * 1024
+#define SAMPLE_RATE     4000  // 입력 데이터 샘플링 속도 4000Hz로 설정
 #define INPUT_SIZE      (SAMPLE_RATE * 2)  // 바이트 단위 크기(1샘플이 2바이트)
-#define INPUT_SAMPLES   SAMPLE_RATE        // 1초에 8000 샘플 (16-bit PCM)
+#define INPUT_SAMPLES   SAMPLE_RATE        // 1초에 4000 샘플 (16-bit PCM)
 static const char *TAG = "WAKE_WORD"; // 로깅 시 표시될 태그를 정의합니다. 디버깅 및 로깅 메시지 구분에 사용됩니다.
 
 
@@ -60,10 +60,14 @@ static const char *TAG = "WAKE_WORD"; // 로깅 시 표시될 태그를 정의�
 
 
 // TensorFlow Lite Micro 설정
-__attribute__((aligned(16))) uint8_t tensor_arena[TENSOR_ARENA_SIZE]; // 텐서 아레나 메모리 정렬
+// 기존 정적 Tensor Arena 정의를 제거
+// __attribute__((aligned(16))) uint8_t tensor_arena[TENSOR_ARENA_SIZE]; 
 tflite::MicroInterpreter* interpreter = nullptr;
 TfLiteTensor* input_tensor = nullptr;
 TfLiteTensor* output_tensor = nullptr;
+
+// 동적 메모리로 Tensor Arena 할당
+uint8_t* tensor_arena = nullptr;
 
 // SPIFFS 초기화
 void spiffs_init() {
@@ -158,19 +162,101 @@ void i2s_init(i2s_chan_handle_t* i2s_rx_channel) {
     ESP_LOGI(TAG, "I2S initialized successfully.");
 }
 
+// 서브그래프 및 연산자 정보 출력
+void print_subgraph_and_operator_info(const tflite::Model* model) {
+    ESP_LOGI(TAG, "Model contains the following subgraphs and operators:");
+    
+    auto subgraphs = model->subgraphs();
+    if (!subgraphs) {
+        ESP_LOGE(TAG, "No subgraphs found in the model.");
+        return;
+    }
+
+    for (int subgraph_idx = 0; subgraph_idx < subgraphs->size(); ++subgraph_idx) {
+        const auto* subgraph = subgraphs->Get(subgraph_idx);
+        ESP_LOGI(TAG, "Subgraph %lu:", static_cast<unsigned long>(subgraph_idx));  // %lu 사용
+        ESP_LOGI(TAG, "  Number of Tensors: %lu", static_cast<unsigned long>(subgraph->tensors()->size()));
+        ESP_LOGI(TAG, "  Number of Inputs: %lu", static_cast<unsigned long>(subgraph->inputs()->size()));
+        ESP_LOGI(TAG, "  Number of Outputs: %lu", static_cast<unsigned long>(subgraph->outputs()->size()));
+        ESP_LOGI(TAG, "  Number of Operators: %lu", static_cast<unsigned long>(subgraph->operators()->size()));
+
+        // 입력 텐서 정보 출력
+        const auto* input_indices = subgraph->inputs();
+        if (input_indices && input_indices->size() > 0) {
+            for (int i = 0; i < input_indices->size(); ++i) {
+                int input_index = input_indices->Get(i);
+                const auto* tensor = subgraph->tensors()->Get(input_index);
+                ESP_LOGI(TAG, "  Input Tensor %d Dimensions:", i);
+
+                if (tensor) {
+                    const auto* dims = tensor->shape();
+                    for (int dim_idx = 0; dim_idx < dims->size(); ++dim_idx) {
+                        ESP_LOGI(TAG, "    Dimension %d: %ld", dim_idx, dims->Get(dim_idx)); // %ld 사용
+                    }
+                } else {
+                    ESP_LOGE(TAG, "    Tensor information not available.");
+                }
+            }
+        }
+
+        // 출력 텐서 정보 출력
+        const auto* output_indices = subgraph->outputs();
+        if (output_indices && output_indices->size() > 0) {
+            for (int i = 0; i < output_indices->size(); ++i) {
+                int output_index = output_indices->Get(i);
+                const auto* tensor = subgraph->tensors()->Get(output_index);
+                ESP_LOGI(TAG, "  Output Tensor %d Dimensions:", i);
+
+                if (tensor) {
+                    const auto* dims = tensor->shape();
+                    for (int dim_idx = 0; dim_idx < dims->size(); ++dim_idx) {
+                        ESP_LOGI(TAG, "    Dimension %d: %ld", dim_idx, dims->Get(dim_idx)); // %ld 사용
+                    }
+                } else {
+                    ESP_LOGE(TAG, "    Tensor information not available.");
+                }
+            }
+        }
+
+        // 연산자 정보 출력
+        const auto* operators = subgraph->operators();
+        for (int op_idx = 0; op_idx < operators->size(); ++op_idx) {
+            const auto* op = operators->Get(op_idx);
+            auto opcode_index = op->opcode_index();
+            auto opcode = model->operator_codes()->Get(opcode_index);
+            auto builtin_code = static_cast<tflite::BuiltinOperator>(opcode->builtin_code());
+            const char* op_name = tflite::EnumNameBuiltinOperator(builtin_code);
+
+            ESP_LOGI(TAG, "  Operator %lu: %s", static_cast<unsigned long>(op_idx), op_name ? op_name : "CUSTOM");
+        }
+    }
+}
+
 // TensorFlow Lite Micro 초기화
 void tflm_init() {
     ESP_LOGI(TAG, "Initializing TensorFlow Lite Micro...");
+
+    // Tensor Arena를 동적으로 할당
+    tensor_arena = (uint8_t*)malloc(TENSOR_ARENA_SIZE);
+    if (!tensor_arena) {
+        ESP_LOGE(TAG, "Failed to allocate Tensor Arena in heap!");
+        return;
+    }
+    ESP_LOGI(TAG, "Tensor Arena allocated at %p", (void*)tensor_arena);
 
     const tflite::Model* model = load_model_from_spiffs("/spiffs/wake_word_model.tflite");
 
     if (!model) {
         ESP_LOGE(TAG, "Model is null! Please check the model file.");
+        free(tensor_arena);  // 할당 해제
         return;
     }
 
+    // 서브그래프 및 연산자 정보 출력
+    print_subgraph_and_operator_info(model);
+
     // 필요한 연산자만 등록
-    static tflite::MicroMutableOpResolver<11> resolver;
+    static tflite::MicroMutableOpResolver<10> resolver;
     resolver.AddShape();
     resolver.AddStridedSlice();
     resolver.AddPack();
@@ -183,59 +269,54 @@ void tflm_init() {
     
     static tflite::MicroInterpreter static_interpreter(model, resolver, tensor_arena, TENSOR_ARENA_SIZE, nullptr);
     interpreter = &static_interpreter;
-
+    
     // 텐서 할당
     TfLiteStatus status = interpreter->AllocateTensors();
     if (status != kTfLiteOk) {
         ESP_LOGE(TAG, "Failed to allocate tensors!");
+        free(tensor_arena);  // 할당 해제
         return;
     }
 
-    input_tensor = interpreter->input(0);
+    // Tensor Arena 사용량 추정 로그
+    uint8_t* tensor_arena_end = tensor_arena + TENSOR_ARENA_SIZE;
+    uint8_t* last_used_address = reinterpret_cast<uint8_t*>(static_interpreter.input(0));  // 임의 기준으로 사용
+    size_t used_bytes = tensor_arena_end - last_used_address;
+    ESP_LOGI(TAG, "Tensor Arena Usage: %zu / %zu bytes", used_bytes, TENSOR_ARENA_SIZE);
+
+    input_tensor = interpreter->input(0); // TfLiteTensor* 타입 
     output_tensor = interpreter->output(0);
 
-    // 입력 텐서 설정
-    input_tensor = interpreter->input(0);
-    if (input_tensor) {
-        ESP_LOGI(TAG, "Input Tensor Details:");
-        ESP_LOGI(TAG, "  Name: %s", input_tensor->name);
-        ESP_LOGI(TAG, "  Type: %d", input_tensor->type);
-        ESP_LOGI(TAG, "  Dimensions: %d", input_tensor->dims->size);
+    ESP_LOGI(TAG, "Input tensor pointer: %p", (void*)input_tensor);
+    ESP_LOGI(TAG, "Input tensor dims pointer: %p", (void*)input_tensor->dims);
+    
+    // 입력 텐서 정보 확인
+    if (input_tensor && input_tensor->dims) {
+        ESP_LOGI(TAG, "Input tensor pointer: %p", (void*)input_tensor);
+        ESP_LOGI(TAG, "Input tensor dims pointer: %p", (void*)input_tensor->dims);
 
-        for (int i = 0; i < input_tensor->dims->size; ++i) {
-            ESP_LOGI(TAG, "    Dim %d: %d", i, input_tensor->dims->data[i]);
+        // tensor_arena 범위 내인지 확인
+        if ((uintptr_t)(input_tensor->dims) < (uintptr_t)tensor_arena ||
+            (uintptr_t)(input_tensor->dims) >= (uintptr_t)(tensor_arena + TENSOR_ARENA_SIZE)) {
+            ESP_LOGE(TAG, "Input tensor->dims points outside tensor_arena!");
+        } else {
+            ESP_LOGI(TAG, "Input tensor->dims is within tensor_arena.");
         }
 
-        if (input_tensor->dims->size != 2 || input_tensor->dims->data[1] != INPUT_SAMPLES) {
-            ESP_LOGE(TAG, "Unexpected input tensor dimensions. Expected [1, %d], got [%d, %d].",
-                    INPUT_SAMPLES, input_tensor->dims->data[0], input_tensor->dims->data[1]);
-            return;
-        }
-    } else {
-        ESP_LOGE(TAG, "Input tensor is null!");
-        return;
-    }
-
-    // 출력 텐서 설정
-    output_tensor = interpreter->output(0);
-    if (output_tensor) {
-        ESP_LOGI(TAG, "Output Tensor Details:");
-        ESP_LOGI(TAG, "  Name: %s", output_tensor->name);
-        ESP_LOGI(TAG, "  Type: %d", output_tensor->type);
-        ESP_LOGI(TAG, "  Dimensions: %d", output_tensor->dims->size);
-
-        for (int i = 0; i < output_tensor->dims->size; ++i) {
-            ESP_LOGI(TAG, "    Dim %d: %d", i, output_tensor->dims->data[i]);
+        // dims raw data 출력
+        const uint8_t* raw_data = reinterpret_cast<const uint8_t*>(input_tensor->dims);
+        for (int i = 0; i < sizeof(TfLiteIntArray); ++i) {
+            ESP_LOGI(TAG, "dims raw data[%d]: 0x%02x", i, raw_data[i]);
         }
 
-        if (output_tensor->dims->size != 2 || output_tensor->dims->data[1] != 2) {
-            ESP_LOGE(TAG, "Unexpected output tensor dimensions. Expected [1, 2], got [%d, %d].",
-                    output_tensor->dims->data[0], output_tensor->dims->data[1]);
-            return;
+        // dims->size 및 dims->data 확인
+        const TfLiteIntArray* dims = input_tensor->dims;
+        ESP_LOGI(TAG, "Input tensor dims size: %d", dims->size);
+        for (int i = 0; i < dims->size; ++i) {
+            ESP_LOGI(TAG, "Dim %d: %d", i, dims->data[i]);
         }
     } else {
-        ESP_LOGE(TAG, "Output tensor is null!");
-        return;
+        ESP_LOGE(TAG, "Input tensor or dims pointer is null!");
     }
 
 }
