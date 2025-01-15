@@ -1,56 +1,7 @@
-# Python 베이스 이미지 사용
-FROM python:3.12-slim AS base
+# ESP-IDF 기반 이미지 사용
+FROM esp-idf-base AS base
 
-# 작업 디렉토리 설정
 WORKDIR /app
-
-# ESP32와 Python 환경을 위한 필수 패키지 설치
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    wget \
-    cmake \
-    ninja-build \
-    gperf \
-    python3-pip \
-    python3-setuptools \
-    python3-venv \
-    libffi-dev \
-    libssl-dev \
-    libusb-1.0-0-dev \
-    pkg-config \
-    curl \
-    unzip \
-    build-essential \
-    kmod \
-    udev \
-    dos2unix \
-    alsa-utils \
-    bsdmainutils \
-    nano \
-    vim \
-    gcc \
-    g++ \
-    tmux \
-    minicom \
-    socat \
-    lsof \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-# ESP-IDF 클론 및 설치
-RUN git clone -b v5.3.1 --recursive https://github.com/espressif/esp-idf.git /esp-idf
-RUN /esp-idf/install.sh
-
-# ESP-IDF 환경 변수 추가
-ENV IDF_PATH="/esp-idf"
-ENV PATH="${IDF_PATH}/tools:$PATH"
-
-# TensorFlow Lite Micro 소스코드 클론 및 설치
-RUN git clone --recurse-submodules https://github.com/espressif/esp-tflite-micro.git /app/components/esp-tflite-micro
-RUN cd /app/components/esp-tflite-micro && git rev-parse --is-inside-work-tree || (echo "Invalid git repository" && exit 1)
-
-# PlatformIO 설치
-RUN pip install --no-cache-dir platformio
 
 # Python 의존성 복사 및 설치
 COPY requirements.txt .
@@ -61,8 +12,15 @@ COPY . /app
 
 # 스크립트를 복사하고 실행 권한 부여
 RUN dos2unix /app/scripts/set_new_id.sh && chmod +x /app/scripts/set_new_id.sh
+RUN dos2unix /esp-idf/export.sh && chmod +x /esp-idf/export.sh
 
+# ENTRYPOINT에서 export.sh와 set_new_id.sh를 실행한 후 idf.py 실행
+ENTRYPOINT ["/bin/bash", "-c", "source /esp-idf/export.sh && /app/scripts/set_new_id.sh && exec \"$@\"", "--"]
 
-# 컨테이너가 시작될 때마다 스크립트를 실행하도록 설정
-CMD ["/app/scripts/set_new_id.sh"]
+# 기본 명령어 설정
+CMD ["idf.py", "build", "--no-hints"]
 #CMD ["bash"]
+
+# RUN=> 이미지 빌드
+# CMD=> 컨테이너가 시작될 때 실행될 기본 명령어, 컨테이너의 기본 명령을 설정하지만 사용자가 다른 명령어를 제공하면 무시됩니다.
+# ENTRYPOINT=> 컨테이너의 고정 실행 프로세스를 설정하며, 사용자 입력이 결합됩니다.

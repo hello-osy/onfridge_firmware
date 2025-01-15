@@ -71,7 +71,16 @@ usbipd attach --busid 1-1 --wsl
 
 - Docker Desktop을 설치하고 실행합니다.
 
-### 2. Docker 이미지 빌드(vscode 터미널에서 하면 됨)
+### 2. Docker 이미지 생성 & 컨테이너 생성
+- Dockerfile이 2개입니다. 필요한 것을 사용하시면 됩니다.
+- docker-compose.yml은 응용 이미지를 생성하고, 그것을 바탕으로 컨테이너를 생성합니다.
+- ESP-IDF 이미지가 이미 있다면, 응용 이미지만 새로 생성하면 됩니다.
+- **ESP-IDF 이미지 생성** `docker build -t esp-idf-base -f Dockerfile.esp-idf-base .`
+- **응용 이미지 생성** `docker-compose up --build`
+- **컨테이너 시작** `docker restart onfridge_firmware_container`
+- **컨테이너 실행** `docker exec -it onfridge_firmware_container bash`
+<!-- 
+### 3. Docker 이미지 빌드(vscode 터미널에서 하면 됨)
 
 전체 빌드는 처음에 1번만 하시면 됩니다.
 
@@ -91,7 +100,7 @@ docker-compose up -d --build
 
 ```bash
 docker-compose down
-```
+``` -->
 
 - docker 빌드 캐시 삭제 명령:
 
@@ -264,6 +273,102 @@ pio device list
 2. Tensorflow로 음성 구분 모델 훈련(구글 드라이브 공유 폴더: https://drive.google.com/drive/folders/1fxsOHjfCKM9QRMNyvALZ_kBjqtpUxxxc?usp=sharing )
 3. 훈련된 모델을 c배열로 바꾸고 헤더파일로 만들어서, .c파일에서 가져다가 쓰도록 만들어준다.
 4. 최적화 및 테스트(Low-pass Filter, Moving Average Filter, 저전력 모드, Threshold 값 조정, 다양한 배경 소음에서 웨이크 워드 테스트)
+
+## ESP32 메모리 구조 및 플래시 메모리 관리
+
+### 모델 저장 및 .map 파일
+- **`model_tflite`**: 플래시 메모리에 SPIFFS 파일 시스템으로 저장.
+- **`.map 파일`**: 컴파일러와 링커가 생성하며, 프로그램의 메모리 배치와 관련된 정보를 제공.
+  - **주요 용도**:
+    - 메모리 사용량 분석.
+    - 플래시 메모리 배치 확인.
+    - 디버깅 및 최적화.
+
+
+### ESP32 메모리 구조
+
+1. **SRAM (Static RAM)**
+- ESP32의 **데이터 처리를 위한 RAM**으로, IRAM과 DRAM으로 구분.
+- **역할**:
+  - IRAM: 실행 코드(.text) 저장.
+  - DRAM: 데이터(.data, .bss, .heap, .stack) 저장.
+
+2. **IRAM (Instruction RAM)**
+- **용도**:
+  - 실행 가능한 코드 저장.
+  - 인터럽트 핸들러와 같은 고성능 코드 배치.
+  - 일부 읽기 전용 데이터 배치 가능.
+- **특징**:
+  - CPU가 직접 접근하여 실행 속도가 빠름.
+
+3. **DRAM (Data RAM)**
+- **ESP32 DRAM**:
+  - 내부 SRAM으로 DDR DRAM과 다릅니다.
+- **용도**:
+  - 전역 변수 (.data, .bss), 동적 메모리 (.heap), 스택 (.stack) 저장.
+- **특징**:
+  - ESP32 내부 SRAM으로 구현.
+  - 정적 RAM으로 동작하며 휘발성 메모리 (전원이 꺼지면 데이터 손실).
+
+4. **플래시 (Flash)**
+- **용도**:
+  - 프로그램 코드 (.text), 읽기 전용 데이터 (.rodata), 초기화된 전역 변수 (.data) 저장.
+- **특징**:
+  - 비휘발성 메모리로 전원이 꺼져도 데이터 유지.
+  - 실행 시:
+    - `.text`: IRAM으로 복사되어 실행.
+    - `.data`: DRAM으로 복사되어 실행.
+  - 읽기 속도는 RAM보다 느리지만 데이터 저장 용도로 적합.
+
+### 메모리 세그먼트
+
+| 세그먼트  | 설명                                       | 저장 위치                  |
+|-----------|------------------------------------------|---------------------------|
+| `.text`   | 실행 가능한 명령어 (코드 섹션)               | 플래시 메모리 → IRAM       |
+| `.rodata` | 읽기 전용 데이터 (상수, 문자열 등)            | 플래시 메모리              |
+| `.data`   | 초기화된 전역 변수                          | SRAM (DRAM/IRAM)          |
+| `.bss`    | 초기화되지 않은 전역 변수                    | SRAM (DRAM)               |
+| `.heap`   | 동적 메모리 할당 영역 (`malloc`, `new` 등)    | SRAM (DRAM)               |
+| `.stack`  | 함수 호출 시 스택 프레임 및 로컬 변수 저장    | SRAM (DRAM, 태스크별 관리) |
+
+## idf.py 사용 방법
+- pio 명령어랑 비슷한 일을 하는 idf.py를 사용할 수 있습니다.
+- esp32 만든 회사에서 제공하는 명령어입니다.
+
+1. `idf.py build`를 통해서 현재 디렉토리 안의 프로젝트를 빌드할 수 있습니다.
+2. `idf.py flash`는 `pio run -t upload`와 같은 기능입니다.
+3. `idf.py spiffs`는 `pio run -t uploadfs`와 같은 기능입니다.
+
+- ESP32의 플래시 메모리는 부트로더, 애플리케이션, 파티션 테이블과 같은 여러 영역으로 나뉘어 있습니다.
+
+4. `idf.py app-flash` 컴파일된 애플리케이션 바이너리(.bin 파일)를 ESP32의 애플리케이션 영역(application area)에 플래싱합니다.
+5. `idf.py bootloader-flash` ESP-IDF의 부트로더 바이너리(bootloader.bin)를 ESP32의 부트로더 영역(bootloader area)에 플래싱합니다. 부트로더는 ESP32가 실행될 때 가장 먼저 실행되는 프로그램으로, 애플리케이션과 플래시 메모리의 나머지 부분을 초기화합니다.
+
+## ESP32 Partition Table 설명
+
+ESP32 플래시 메모리의 파티션 테이블은 메모리를 여러 영역으로 나누어 각 영역의 용도를 정의합니다.
+
+### 파티션 테이블
+
+| Name      | Type  | SubType | Offset   | Size     | 역할                                   |
+|-----------|-------|---------|----------|----------|----------------------------------------|
+| `nvs`     | data  | nvs     | `0x9000` | `0x5000` | 비휘발성 데이터 저장 (Wi-Fi 설정 등).   |
+| `otadata` | data  | ota     | `0xE000` | `0x2000` | OTA 업데이트 정보 저장.                |
+| `app0`    | app   | ota_0   | `0x10000`| `0x140000`| 첫 번째 OTA 애플리케이션 저장.         |
+| `spiffs`  | data  | spiffs  | `0x150000`| `0x50000` | SPIFFS 파일 시스템 (정적 자원 저장).   |
+
+### 주요 설명
+- **`nvs`**: 비휘발성 스토리지, 설정 데이터 저장.
+- **`otadata`**: OTA 업데이트 상태를 관리.
+- **`app0`**: 애플리케이션 코드 저장.
+- **`spiffs`**: 정적 파일 시스템 (HTML, CSS, JS 등).
+
+### 플래시 메모리 맵
+- **부트로더 및 파티션 테이블**: `0x0000` ~ `0x8FFF`.
+- **NVS 영역**: `0x9000` ~ `0xDFFF`.
+- **OTA 데이터 영역**: `0xE000` ~ `0xFFFF`.
+- **애플리케이션 영역**: `0x10000` ~ `0x150000`.
+- **SPIFFS 파일 시스템 영역**: `0x150000` ~ `0x1AFFFF`.
 
 ## 참고 사항
 
