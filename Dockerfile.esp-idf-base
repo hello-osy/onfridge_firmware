@@ -1,0 +1,57 @@
+# ESP-IDF 전용 이미지 생성
+FROM python:3.12-slim AS esp-idf-base
+
+WORKDIR /app
+
+# ESP32와 Python 환경을 위한 필수 패키지 설치
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    wget \
+    cmake \
+    ninja-build \
+    gperf \
+    python3-pip \
+    python3-setuptools \
+    python3-venv \
+    libffi-dev \
+    libssl-dev \
+    libusb-1.0-0-dev \
+    pkg-config \
+    curl \
+    unzip \
+    build-essential \
+    kmod \
+    udev \
+    dos2unix \
+    alsa-utils \
+    bsdmainutils \
+    nano \
+    vim \
+    gcc \
+    g++ \
+    tmux \
+    minicom \
+    socat \
+    lsof \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# ESP-IDF 클론 및 설치
+RUN git clone -b v5.3.1 --recursive https://github.com/espressif/esp-idf.git /esp-idf
+RUN /esp-idf/install.sh
+
+# ESP-IDF 환경 변수 추가
+ENV IDF_PATH="/esp-idf"
+ENV PATH="${IDF_PATH}/tools:$PATH"
+ENV PATH="${IDF_PATH}/tools/esp-idf-tools:${PATH}"
+
+# TensorFlow Lite Micro 소스코드를 /app/components/esp-tflite-micro에 설치
+RUN mkdir -p /app/components/esp-tflite-micro && \
+    git clone --recurse-submodules https://github.com/espressif/esp-tflite-micro.git /app/components/esp-tflite-micro && \
+    cd /app/components/esp-tflite-micro && \
+    git rev-parse --is-inside-work-tree || (echo "Invalid git repository" && exit 1)
+
+# PlatformIO 설치
+RUN pip install --no-cache-dir platformio
+
+ENTRYPOINT ["/bin/bash"]
