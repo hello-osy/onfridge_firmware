@@ -119,7 +119,7 @@ docker system prune -a --volumes
 docker cp ./sound_receiver.py onfridge_firmware_container:/app/sound_receiver.py
 docker cp ./src/microphone.c onfridge_firmware_container:/app/src/microphone.c
 docker cp ./src/wake_word.cpp onfridge_firmware_container:/app/src/wake_word.cpp
-docker cp ./src/wake_word_model.h onfridge_firmware_container:/app/src/wake_word_model.h
+docker cp ./data/wake_word_model.tflite onfridge_firmware_container:/app/data/wake_word_model.tflite
 ```
 
 - 컨테이너 진입
@@ -402,3 +402,5 @@ echo "10c4 ea60" | tee /sys/bus/usb-serial/drivers/cp210x/new_id
 11. 마음대로 CMakeLists.txt를 만들다보면, 이미 잘 만들어져있던 CMakeLists.txt에 덮어쓰기 되면서 문제가 생길 수 있습니다.(git clone해서 가져온 CMakeLists.txt가 덮어쓰기 되면서 사라짐.)
 12. `vim /app/.pio/build/esp32dev/onfridge_firmware.map`
 13. 웨이크 모델 훈련할 때의 정보에 맞게 코드를 짜셔야 합니다. 입력 텐서 크기, 출력 텐서 크기 등의 설정이 같아야 합니다.
+14. Flash Memory Size Mismatch Warning 오류가 뜨면, `pio run -t menuconfig`한 다음, "Serial flasher config > Flash size"에서 4MB를 선택한 뒤 저장합니다.
+15. 웨이크 워드 모델 훈련할 때의 input type은 np.float32이고, 추론할 때의 input type은 np.int8입니다. 모델 훈련 이후, 양자화해서 `.tflite`형식으로 저장했습니다.
