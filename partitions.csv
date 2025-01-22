@@ -1,5 +1,12 @@
-# Name,   Type, SubType, Offset,   Size, Flags
+# Name,   Type, SubType, Offset,   Size,     Flags
 nvs,      data, nvs,     0x9000,   0x5000,
-otadata,  data, ota,     0xe000,   0x2000,
-app0,     app,  ota_0,   0x10000,  0x140000,
-spiffs,   data, spiffs,  0x150000, 0x50000
+otadat,   data, ota,     0xe000,   0x2000,
+app0,     app,  ota_0,   0x10000,  0x130000,
+spiffs,   data, spiffs,  0x150000, 0x2B0000,
+
+# 16진수 값 (0x 접두사)는 플래시 메모리에서 시작 위치 (Offset)와 크기 (Size)를 나타냅니다.
+# 전체 플래시 크기는 4MB (0x400000)입니다.
+# - NVS: 20KB (0x5000) - Non-Volatile Storage
+# - OTA Data: 8KB (0x2000) - Over-The-Air Update Metadata
+# - App0: 1.25MB (0x130000) - Main Application
+# - SPIFFS: 1.7MB (0x2B0000) - File System
