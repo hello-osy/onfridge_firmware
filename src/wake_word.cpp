@@ -5,6 +5,7 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
 #include "driver/i2s_std.h" // I2S (마이크 입력 처리)를 위한 ESP32 드라이버.
 #include "esp_log.h"  // ESP32 로깅 유틸리티.
 #include "esp_system.h" // ESP32 시스템 관련 유틸리티.
@@ -15,8 +16,8 @@
 #include <cmath>
 
 #define I2S_NUM         I2S_NUM_0
-#define DMA_BUFFER_COUNT 8
-#define I2S_BUFFER_SIZE 4000
+#define DMA_BUFFER_COUNT 3
+#define I2S_BUFFER_SIZE 2000
 #define SAMPLE_RATE     4000  // 입력 데이터 샘플링 속도 4000Hz로 설정
 #define INPUT_SIZE      (SAMPLE_RATE * 2)  // 바이트 단위 크기(1샘플이 2바이트)
 #define INPUT_SAMPLES   SAMPLE_RATE        // 1초에 4000 샘플 (16-bit PCM)
@@ -24,6 +25,13 @@
 #define MAX_MODEL_SIZE 4 * 1024
 
 static const char *TAG = "WAKE_WORD";
+
+// 타입 주의 uint8_t, uint16_t, int8_t, int16_t 다 다릅니다. 
+// 메모리 블록은 부호의 의미를 가지지 않으므로, 이를 **부호 없는 데이터(uint8_t)**로 정의하는 것이 일반적입니다.
+// 나머지 오디오 관련 데이터는 부호 있는 데이터로 정의했습니다.
+
+// uint8_t를 사용하면, 이후 이 공간을 어떤 방식으로든 해석할 수 있습니다(int8_t, float, int32_t, etc.).
+// 반대로 int8_t로 정의하면, 해당 공간이 부호 있는 8비트 정수라는 의미를 갖게 되어 해석이 제한될 수 있습니다.
 
 // TensorFlow Lite Micro(TFLM)에서 텐서 및 중간 계산 데이터를 저장하기 위한 메모리 공간.
 __attribute__((aligned(16))) static uint8_t tensor_arena[TENSOR_ARENA_SIZE];
@@ -35,6 +43,12 @@ __attribute__((aligned(16))) static uint8_t model_data[MAX_MODEL_SIZE];
 tflite::MicroInterpreter* interpreter = nullptr;
 TfLiteTensor* input_tensor = nullptr;
 TfLiteTensor* output_tensor = nullptr;
+
+// 큐에 전송할 데이터 구조체 정의
+typedef struct {
+    size_t length;                // 실제 읽힌 바이트 수
+    uint8_t data[I2S_BUFFER_SIZE]; // 오디오 데이터
+} audio_block_t;
 
 QueueHandle_t audio_queue;
 
@@ -148,120 +162,173 @@ void tflm_init() {
         return; // 정적 메모리는 해제 불필요
     }
 
-    // Tensor Arena 사용량 추정 로그
-    uint8_t* tensor_arena_end = tensor_arena + TENSOR_ARENA_SIZE;
-    uint8_t* last_used_address = reinterpret_cast<uint8_t*>(static_interpreter.input(0));  // 임의 기준으로 사용
-    size_t used_bytes = tensor_arena_end - last_used_address;
-    ESP_LOGI(TAG, "Tensor Arena Usage: %zu / %zu bytes", used_bytes, TENSOR_ARENA_SIZE);
-
     input_tensor = interpreter->input(0); // TfLiteTensor* 타입 
     output_tensor = interpreter->output(0);
+        
+    // 입력 텐서 유효성 검증 및 상세 로그
+    if (input_tensor == nullptr) {
+        ESP_LOGE(TAG, "Input tensor is NULL. Model may not be initialized properly.");
+        return;
+    }
+    ESP_LOGI(TAG, "Input tensor information:");
+    ESP_LOGI(TAG, "  Type: %d (Expected: %d)", input_tensor->type, kTfLiteInt8);
+    ESP_LOGI(TAG, "  Dimensions:");
+    for (int i = 0; i < input_tensor->dims->size; i++) {
+        ESP_LOGI(TAG, "    dim[%d]: %d", i, input_tensor->dims->data[i]);
+    }
+    ESP_LOGI(TAG, "  Quantization params:");
+    ESP_LOGI(TAG, "    Scale: %f", input_tensor->params.scale);
+    ESP_LOGI(TAG, "    Zero Point: %" PRId32, input_tensor->params.zero_point); // 수정
+
+    // 출력 텐서 유효성 검증 및 상세 로그
+    if (output_tensor == nullptr) {
+        ESP_LOGE(TAG, "Output tensor is NULL. Model may not be initialized properly.");
+        return;
+    }
+    ESP_LOGI(TAG, "Output tensor information:");
+    ESP_LOGI(TAG, "  Type: %d (Expected: %d)", output_tensor->type, kTfLiteInt8);
+    ESP_LOGI(TAG, "  Dimensions:");
+    for (int i = 0; i < output_tensor->dims->size; i++) {
+        ESP_LOGI(TAG, "    dim[%d]: %d", i, output_tensor->dims->data[i]);
+    }
+    ESP_LOGI(TAG, "  Quantization params:");
+    ESP_LOGI(TAG, "    Scale: %f", output_tensor->params.scale);
+    ESP_LOGI(TAG, "    Zero Point: %" PRId32, output_tensor->params.zero_point); // 수정
+
+    // 입력 텐서 타입 검증
+    if (input_tensor->type != kTfLiteInt8) {
+        ESP_LOGE(TAG, "Input tensor type mismatch. Expected: %d, Found: %d", kTfLiteInt8, input_tensor->type);
+    } else {
+        ESP_LOGI(TAG, "Input tensor type is correct: %d", input_tensor->type);
+    }
+
+    // 출력 텐서 타입 검증
+    if (output_tensor->type != kTfLiteInt8) {
+        ESP_LOGE(TAG, "Output tensor type mismatch. Expected: %d, Found: %d", kTfLiteInt8, output_tensor->type);
+    } else {
+        ESP_LOGI(TAG, "Output tensor type is correct: %d", output_tensor->type);
+    }
+
+}
+
+// 데이터를 한 번에 변환하는 함수 (비트 연산 사용)
+void convert_uint8_to_int8_bitwise(uint8_t* src, int8_t* dest, size_t len, int* sample_index) {
+    for (size_t i = 0; i < len; i++) {
+        dest[(*sample_index)++] = (int8_t)(src[i] ^ 0x80);  // XOR 연산으로 변환
+    }
 }
 
 // 오디오 캡처 태스크
 void audio_capture_task(void* arg) {
-    ESP_LOGI(TAG, "audio_capture_task Stack watermark: %d bytes", uxTaskGetStackHighWaterMark(nullptr));
+    ESP_LOGI(TAG, "audio_capture_task entered");
 
-    vTaskDelay(10000 / portTICK_PERIOD_MS);
     if (!audio_queue) {
-        ESP_LOGI(TAG, "null audio_queue");
-        vTaskDelete(nullptr);
-    }
-
-    // 크기가 큰 배열을 힙으로 할당
-    i2s_chan_handle_t* i2s_rx_channel = (i2s_chan_handle_t*)arg;
-    uint8_t* current_buffer = (uint8_t*)heap_caps_malloc(I2S_BUFFER_SIZE, MALLOC_CAP_DMA);
-    if (!current_buffer) {
-        ESP_LOGE(TAG, "Failed to allocate current_buffer.");
+        ESP_LOGE(TAG, "audio_queue is NULL");
         vTaskDelete(nullptr);
     }
     
+    i2s_chan_handle_t* i2s_rx_channel = (i2s_chan_handle_t*)arg;
+    audio_block_t block;
     size_t bytes_read = 0;
 
     while (true) {
-        ESP_LOGE(TAG, "before I2S_channel_read");
-        esp_err_t err = i2s_channel_read(*i2s_rx_channel, current_buffer, I2S_BUFFER_SIZE, &bytes_read, portMAX_DELAY);
-        ESP_LOGE(TAG, "after I2S_channel_read");
-        if (err != ESP_OK) continue;
-
-        if (xQueueSend(audio_queue, current_buffer, portMAX_DELAY) != pdTRUE) {
-            ESP_LOGE(TAG, "Failed to send data to queue.");
+        esp_err_t err = i2s_channel_read(*i2s_rx_channel, block.data, I2S_BUFFER_SIZE, &bytes_read, portMAX_DELAY);
+        if (err == ESP_OK) {
+            block.length = bytes_read;
+            if (xQueueSend(audio_queue, &block, portMAX_DELAY) == pdTRUE) {
+                ESP_LOGI(TAG, "%d bytes sent", bytes_read);
+            } else {
+                ESP_LOGE(TAG, "Failed to send data to queue.");
+            }
+        } else {
+            ESP_LOGE(TAG, "I2S read failed with error: %d", err);
         }
     }
-    // 리소스 해제
-    heap_caps_free(current_buffer);\
+
+    // 리소스 해제 (실제로는 도달하지 않음)
+    heap_caps_free(block.data);
 }
 
 // 모델 추론 태스크
 void model_inference_task(void* arg) {
-    ESP_LOGI(TAG, "model_inference_task Stack watermark: %d bytes", uxTaskGetStackHighWaterMark(nullptr));
+    ESP_LOGI(TAG, "model_inference_task entered");
 
-    vTaskDelay(10000 / portTICK_PERIOD_MS);
     if (!audio_queue) {
-        ESP_LOGI(TAG, "null audio_queue");
+        ESP_LOGE(TAG, "audio_queue is NULL");
         vTaskDelete(nullptr);
     }
+    
+    audio_block_t recv_block;
 
-    // uint8_t 데이터를 저장할 임시 버퍼와 최종 int16_t 데이터 버퍼
-    uint8_t* queue_buffer = (uint8_t*)heap_caps_malloc(I2S_BUFFER_SIZE, MALLOC_CAP_DEFAULT);
-    if (!queue_buffer) {
-        ESP_LOGE(TAG, "Failed to allocate queue_buffer.");
-        vTaskDelete(nullptr);
-    }
-
-    int16_t* samples = (int16_t*)heap_caps_malloc(INPUT_SAMPLES * sizeof(int16_t), MALLOC_CAP_DEFAULT);
-    if (!samples) {
-        ESP_LOGE(TAG, "Failed to allocate samples.");
-        heap_caps_free(queue_buffer);
+    int8_t* converted_buffer = (int8_t*)heap_caps_malloc(INPUT_SAMPLES, MALLOC_CAP_DEFAULT);
+    if (!converted_buffer) {
+        ESP_LOGE(TAG, "Failed to allocate converted_buffer.");
         vTaskDelete(nullptr);
     }
 
     int sample_index = 0;
 
     while (true) {
-        // 큐에서 uint8_t 데이터를 읽어오기
-        if (xQueueReceive(audio_queue, queue_buffer, portMAX_DELAY) == pdTRUE) {
-            size_t bytes_to_process = I2S_BUFFER_SIZE / 2; // 16-bit PCM 기준
-            for (size_t i = 0; i < bytes_to_process; i++) {
-                samples[sample_index++] = (int16_t)((queue_buffer[2 * i + 1] << 8) | queue_buffer[2 * i]);
-
-                // INPUT_SAMPLES만큼 데이터가 모이면 추론 실행
-                if (sample_index == INPUT_SAMPLES) {
-                    int8_t* input_data = input_tensor->data.int8;
-                    for (int j = 0; j < INPUT_SAMPLES; j++) {
-                        input_data[j] = (samples[j] / 32768.0f) * input_tensor->params.scale + input_tensor->params.zero_point;
-                    }
-
-                    // 모델 추론
-                    if (interpreter->Invoke() == kTfLiteOk) {
-                        for (int j = 0; j < output_tensor->dims->data[1]; j++) {
-                            float score = (output_tensor->data.int8[j] - output_tensor->params.zero_point) * output_tensor->params.scale;
-                            ESP_LOGI(TAG, "Output %d: %f", j, score);
-                        }
-                    } else {
-                        ESP_LOGE(TAG, "Failed to invoke interpreter.");
-                    }
-
-                    // 인덱스 초기화
-                    sample_index = 0;
-                }
+        if (xQueueReceive(audio_queue, &recv_block, portMAX_DELAY) == pdTRUE) {
+            ESP_LOGI(TAG, "xQueueReceive ok, bytes_received: %zu", recv_block.length);
+            
+            // 변환된 데이터가 버퍼에 남지 않도록 최대값 체크
+            if (sample_index + recv_block.length > INPUT_SAMPLES) {
+                ESP_LOGW(TAG, "Buffer overflow detected. Truncating the data.");
+                recv_block.length = INPUT_SAMPLES - sample_index;
             }
+
+            // 한 번에 변환
+            convert_uint8_to_int8_bitwise(recv_block.data, converted_buffer, recv_block.length, &sample_index);
+            ESP_LOGI(TAG, "convert_uint8_to_int8_bitwise ok, sample_index: %d", sample_index);
+
+            // 버퍼가 채워지면 추론
+            if (sample_index >= INPUT_SAMPLES) {
+                ESP_LOGI(TAG, "Buffer full. Preparing for inference.");
+
+                // 입력 텐서로 데이터를 채움
+                int8_t* input_data = input_tensor->data.int8;
+                memcpy(input_data, converted_buffer, INPUT_SAMPLES * sizeof(int8_t));
+
+                // 모델 추론
+                if (interpreter->Invoke() == kTfLiteOk) {
+                    ESP_LOGI(TAG, "interpreter->Invoke() == kTfLiteOk");
+                    for (int j = 0; j < output_tensor->dims->data[1]; j++) {
+                        float score = (output_tensor->data.int8[j] - output_tensor->params.zero_point) * output_tensor->params.scale;
+                        ESP_LOGI(TAG, "Output %d: %f", j, score);
+                    }
+                } else {
+                    ESP_LOGE(TAG, "Failed to invoke interpreter.");
+                }
+
+                // 버퍼 초기화
+                sample_index = 0;
+            }
+        } else {
+            ESP_LOGE(TAG, "Failed to receive data from queue.");
         }
     }
-    // 리소스 해제
-    heap_caps_free(samples);
+
+    heap_caps_free(converted_buffer);
 }
 
 // 메인 함수
 extern "C" void app_main(void) {
+    esp_log_level_set("*", ESP_LOG_VERBOSE);
+
     i2s_chan_handle_t i2s_rx_channel = nullptr;
     spiffs_init();
     i2s_init(&i2s_rx_channel);
     tflm_init();
 
-    audio_queue = xQueueCreate(5, sizeof(int8_t) * I2S_BUFFER_SIZE);
-    if (!audio_queue) esp_restart();
+    // 큐 생성: audio_block_t 구조체 크기로 설정
+    audio_queue = xQueueCreate(3, sizeof(audio_block_t));
+    if (!audio_queue) {
+        ESP_LOGE(TAG, "Failed to create audio_queue. Restarting...");
+        esp_restart();
+    }
 
-    xTaskCreatePinnedToCore(audio_capture_task, "Audio Capture", 40960, &i2s_rx_channel, 10, nullptr, 0);
-    xTaskCreatePinnedToCore(model_inference_task, "Model Inference", 40960, nullptr, 5, nullptr, 1);
+    // 태스크 생성: 스택 크기를 충분히 할당하고, 우선순위와 코어를 설정
+    xTaskCreatePinnedToCore(audio_capture_task, "Audio Capture", 4096, &i2s_rx_channel, 10, nullptr, 0);
+    xTaskCreatePinnedToCore(model_inference_task, "Model Inference", 8192, nullptr, 5, nullptr, 1);
 }

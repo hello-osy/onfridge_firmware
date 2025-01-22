@@ -120,6 +120,7 @@ docker cp ./sound_receiver.py onfridge_firmware_container:/app/sound_receiver.py
 docker cp ./src/microphone.c onfridge_firmware_container:/app/src/microphone.c
 docker cp ./src/wake_word.cpp onfridge_firmware_container:/app/src/wake_word.cpp
 docker cp ./data/wake_word_model.tflite onfridge_firmware_container:/app/data/wake_word_model.tflite
+docker cp ./esp_exception_decoder.py onfridge_firmware_container:/app/esp_exception_decoder.py
 ```
 
 - 컨테이너 진입
@@ -142,6 +143,10 @@ docker cp onfridge_firmware_container:/app/src/microphone.c ./src/microphone.c
 docker cp onfridge_firmware_container:/app/received_audio.wav ./received_audio.wav
 
 docker cp onfridge_firmware_container:/app/.pio/build/esp32dev/onfridge_firmware.map ./onfridge_firmware.map
+
+docker cp onfridge_firmware_container:/app/sdkconfig.esp32dev ./sdkconfig.esp32dev
+
+docker cp onfridge_firmware_container:/app/myStackTrace.txt ./myStackTrace.txt
 ```
 
 ## 개발할 때
@@ -370,6 +375,13 @@ ESP32 플래시 메모리의 파티션 테이블은 메모리를 여러 영역�
 - **애플리케이션 영역**: `0x10000` ~ `0x150000`.
 - **SPIFFS 파일 시스템 영역**: `0x150000` ~ `0x1AFFFF`.
 
+## 에러문 해독 방법
+
+1. 도커 컨테이너 안으로 들어간다.
+2. `pio device monitor`명령어를 실행했을 때 뜨는 에러문에 맞게 파일 내용을 수정한다.(`vim myStackTrace.txt`) `:wq`해서 저장한다.
+3. `python esp_exception_decoder.py myStackTrace.txt` 명령어를 입력해서, 에러문을 해독한다.
+
+
 ## 참고 사항
 
 1. 특정 파일만 빌드해서 업로드하고 싶으면 src/CMakeLists.txt파일을 수정하면 됩니다.
@@ -404,3 +416,5 @@ echo "10c4 ea60" | tee /sys/bus/usb-serial/drivers/cp210x/new_id
 13. 웨이크 모델 훈련할 때의 정보에 맞게 코드를 짜셔야 합니다. 입력 텐서 크기, 출력 텐서 크기 등의 설정이 같아야 합니다.
 14. Flash Memory Size Mismatch Warning 오류가 뜨면, `pio run -t menuconfig`한 다음, "Serial flasher config > Flash size"에서 4MB를 선택한 뒤 저장합니다.
 15. 웨이크 워드 모델 훈련할 때의 input type은 np.float32이고, 추론할 때의 input type은 np.int8입니다. 모델 훈련 이후, 양자화해서 `.tflite`형식으로 저장했습니다.
+16. 반복문 안에 esp_log사용하면 스택 사용량이 엄청 많아집니다.
+17. SIMD 명령어를 사용하면, 연산 속도를 개선할 수 있습니다.

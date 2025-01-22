@@ -1,3 +1,47 @@
+import tensorflow as tf
+
+# 모델의 입력 및 출력 타입 확인
+interpreter = tf.lite.Interpreter(model_path="./data/wake_word_model.tflite")
+interpreter.allocate_tensors()
+
+# 입력 및 출력 텐서 정보 가져오기
+input_details = interpreter.get_input_details()
+output_details = interpreter.get_output_details()
+
+# TensorFlow Lite 데이터 타입 매핑
+dtype_mapping = {
+    tf.float32: "FLOAT32",
+    tf.int8: "INT8",
+    tf.uint8: "UINT8",
+    tf.int32: "INT32",
+    tf.uint32: "UINT32"
+}
+
+print("Input tensor information:")
+print(f"  Name: {input_details[0]['name']}")
+print(f"  Type: {dtype_mapping.get(input_details[0]['dtype'], str(input_details[0]['dtype']))}")
+print(f"  Scale: {input_details[0]['quantization'][0]}")
+print(f"  Zero Point: {input_details[0]['quantization'][1]}")
+
+print("\nOutput tensor information:")
+print(f"  Name: {output_details[0]['name']}")
+print(f"  Type: {dtype_mapping.get(output_details[0]['dtype'], str(output_details[0]['dtype']))}")
+print(f"  Scale: {output_details[0]['quantization'][0]}")
+print(f"  Zero Point: {output_details[0]['quantization'][1]}")
+
+# 텐서 타입 확인
+if input_details[0]['dtype'] == tf.int8:
+    print("\nInput tensor type matches kTfLiteInt8.")
+else:
+    print("\nInput tensor type does NOT match kTfLiteInt8.")
+
+if output_details[0]['dtype'] == tf.int8:
+    print("Output tensor type matches kTfLiteInt8.")
+else:
+    print("Output tensor type does NOT match kTfLiteInt8.")
+
+
+
 # import tensorflow as tf
 
 # # TensorFlow Lite 모델 파일 경로
@@ -45,19 +89,19 @@
 
 
 
-import tensorflow as tf
+# import tensorflow as tf
 
-interpreter = tf.lite.Interpreter(model_path="./data/wake_word_model.tflite")
-interpreter.allocate_tensors()
+# interpreter = tf.lite.Interpreter(model_path="./data/wake_word_model.tflite")
+# interpreter.allocate_tensors()
 
-# 모델에 사용된 연산자 확인
-try:
-    details = interpreter._get_ops_details()
-    for op in details:
-        print(op)
-except AttributeError:
-    print("TensorFlow 버전에서 '_get_ops_details()'를 사용할 수 없습니다.")
-    print("TensorFlow 버전을 확인하거나 다른 방법을 시도하세요.")
+# # 모델에 사용된 연산자 확인
+# try:
+#     details = interpreter._get_ops_details()
+#     for op in details:
+#         print(op)
+# except AttributeError:
+#     print("TensorFlow 버전에서 '_get_ops_details()'를 사용할 수 없습니다.")
+#     print("TensorFlow 버전을 확인하거나 다른 방법을 시도하세요.")
 
 
 
