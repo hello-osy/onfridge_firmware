@@ -1,3 +1,18 @@
+# import tensorflow.lite as tflite
+
+# interpreter = tflite.Interpreter(model_path="./data/wake_word_model.tflite")
+# interpreter.allocate_tensors()
+
+# print("\n=== 모델에 포함된 연산자 ===")
+# for idx, op in enumerate(interpreter._get_ops_details()):
+#     print(f"Operation {idx}: {op}")
+
+# print("\n=== 텐서 정보 ===")
+# for tensor in interpreter.get_tensor_details():
+#     print(tensor)
+
+
+
 # import tensorflow as tf
 
 # # 모델의 입력 및 출력 타입 확인
@@ -41,13 +56,13 @@
 #     print("Output tensor type does NOT match kTfLiteInt8.")
 
 
-import tensorflow as tf
+# import tensorflow as tf
 
-with open("./data/wake_word_model.tflite", "rb") as f:
-    buf = f.read()
-interpreter = tf.lite.Interpreter(model_content=buf)
-interpreter.allocate_tensors()
-print("Model Tensors:", interpreter.get_input_details(), interpreter.get_output_details())
+# with open("./data/wake_word_model.tflite", "rb") as f:
+#     buf = f.read()
+# interpreter = tf.lite.Interpreter(model_content=buf)
+# interpreter.allocate_tensors()
+# print("Model Tensors:", interpreter.get_input_details(), interpreter.get_output_details())
 
 
 # import tensorflow as tf
@@ -99,7 +114,7 @@ print("Model Tensors:", interpreter.get_input_details(), interpreter.get_output_
 
 # import tensorflow as tf
 
-# interpreter = tf.lite.Interpreter(model_path="./data/wake_word_model.tflite")
+# interpreter = tf.lite.Interpreter(model_path="./data/wake_word_model.tflite", experimental_delegates=[])
 # interpreter.allocate_tensors()
 
 # # 모델에 사용된 연산자 확인

@@ -26,8 +26,8 @@ constexpr int DMA_FRAME_NUM = DMA_BUFFER_SIZE / (DATA_BIT_WIDTH / 8); // 각 DMA
 
 constexpr int INPUT_SAMPLES = SAMPLE_RATE; // 초당 샘플 개수 (16비트 PCM)
 
-constexpr int TENSOR_ARENA_SIZE = 60 * 1024; // 텐서 연산 메모리 크기
-constexpr int MAX_MODEL_SIZE = 4 * 1024; // 모델 데이터 최대 크기
+constexpr int TENSOR_ARENA_SIZE = 140 * 1024; // 텐서 연산 메모리 크기
+constexpr int MAX_MODEL_SIZE = 10 * 1024; // 모델 데이터 최대 크기
 
 static const char *TAG = "WAKE_WORD";
 
@@ -108,7 +108,7 @@ const tflite::Model* load_model_from_spiffs(const char* model_path) {
         return nullptr;
     }
 
-    size_t read_size = fread(model_data, 1, model_size, file); // 데이터 저장할 메모리 주소, 읽어올 단위 데이터 크기, 읽어올 데이터 개수, 읽어올 파일 핸들들
+    size_t read_size = fread(model_data, 1, model_size, file); // 데이터 저장할 메모리 주소, 읽어올 단위 데이터 크기, 읽어올 데이터 개수, 읽어올 파일 핸들
     fclose(file);
 
     if (read_size != model_size) {
@@ -162,7 +162,7 @@ void i2s_init(i2s_chan_handle_t* i2s_rx_channel) {
 void tflm_init() {
     // 모델 로드
     const tflite::Model* model = load_model_from_spiffs("/spiffs/wake_word_model.tflite");
-    
+
     if (model == nullptr || model->version() != TFLITE_SCHEMA_VERSION) {
         ESP_LOGE(TAG, "Failed to load model or schema version mismatch!");
         return;
@@ -176,10 +176,10 @@ void tflm_init() {
     ESP_LOGI(TAG, "MD5 of model data (loaded): %s", md5_str);
 
     // 필요한 연산자만 등록
-    static tflite::MicroMutableOpResolver<5> resolver;
-    resolver.AddReshape();
-    resolver.AddConv2D();
-    resolver.AddMaxPool2D();  // MaxPool2D 추가
+    static tflite::MicroMutableOpResolver<2> resolver;
+    // resolver.AddReshape();
+    // resolver.AddConv2D();
+    // resolver.AddMaxPool2D();  // MaxPool2D 추가
     resolver.AddFullyConnected();
     resolver.AddSoftmax();
 
@@ -211,10 +211,6 @@ void tflm_init() {
 
 // int16 -> int8 변환 함수
 void convert_int16_to_int8(const uint8_t* src, int8_t* dest, size_t byte_len, int* sample_index) {
-    // byte_len == 2 * 샘플 수 (16bit)
-    // 따라서 sample_count = byte_len / 2
-    // int16_t 범위(-32768 ~ 32767) -> int8_t 범위(-128 ~ 127)
-    // 여기서는 단순히 1/256 스케일링
     size_t sample_count = byte_len / sizeof(int16_t);
     if (*sample_index + sample_count > INPUT_SAMPLES) {
         ESP_LOGE(TAG, "Buffer overflow imminent! sample_index=%d sample_count=%d", *sample_index, sample_count);
@@ -226,8 +222,7 @@ void convert_int16_to_int8(const uint8_t* src, int8_t* dest, size_t byte_len, in
 
     for (size_t i = 0; i < sample_count; i++) {
         int16_t val_16 = src_int16[i];
-        // 1/256로 줄여서 int8 캐스팅
-        int8_t val_8 = static_cast<int8_t>(val_16 / 256);
+        int8_t val_8 = static_cast<int8_t>(val_16 / 256); // 1/256로 줄여서 int8 캐스팅
         dest[(*sample_index)++] = val_8;
     }
 }
@@ -351,8 +346,7 @@ void model_inference_task(void* arg) {
                 // 모델 추론
                 if (interpreter->Invoke() == kTfLiteOk) {
                     ESP_LOGI(TAG, "Inference OK");
-                    int num_classes = output_tensor->dims->data[1];
-                    for (int j = 0; j < num_classes; j++) {
+                    for (int j = 0; j < 2; j++) {
                         float score = (output_tensor->data.int8[j] - output_tensor->params.zero_point)
                                       * output_tensor->params.scale;
                         ESP_LOGI(TAG, "Output[%d]: %f", j, score);
@@ -372,29 +366,19 @@ void model_inference_task(void* arg) {
 
 // 메인 함수
 extern "C" void app_main(void) {
-    ESP_LOGI(TAG, "Largest free block (8-bit memory): %d bytes", heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
-    ESP_LOGI(TAG, "Heap free size (8-bit memory): %d bytes", heap_caps_get_free_size(MALLOC_CAP_8BIT));
-
-    // 동적 메모리 할당
+    // 16바이트 정렬된 메모리에 저장
     model_data = (uint8_t*)heap_caps_aligned_alloc(16, MAX_MODEL_SIZE, MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL); // MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL
     if (!model_data) {
         ESP_LOGE(TAG, "Failed to allocate memory for model_data. Free heap: %" PRIu32, esp_get_free_heap_size());
-        esp_restart(); // 메모리 부족 시 재부팅
+        vTaskDelay(pdMS_TO_TICKS(500)); // 500ms 대기 후 재시도
     }
 
-    ESP_LOGI(TAG, "Largest free block (8-bit memory): %d bytes", heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
-    ESP_LOGI(TAG, "Heap free size (8-bit memory): %d bytes", heap_caps_get_free_size(MALLOC_CAP_8BIT));
-
+    // 16바이트 정렬된 메모리에 저장
     tensor_arena = (uint8_t*)heap_caps_aligned_alloc(16, TENSOR_ARENA_SIZE, MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL); // MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL를 통해서 연속적으로 메모리 할당당
     if (!tensor_arena) {
         ESP_LOGE(TAG, "Failed to allocate memory for tensor_arena. Free heap: %" PRIu32, esp_get_free_heap_size());
-        esp_restart(); // 메모리 부족 시 재부팅
+        vTaskDelay(pdMS_TO_TICKS(500)); // 500ms 대기 후 재시도
     }
-
-    ESP_LOGI(TAG, "Largest free block (8-bit memory): %d bytes", heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
-    ESP_LOGI(TAG, "Heap free size (8-bit memory): %d bytes", heap_caps_get_free_size(MALLOC_CAP_8BIT));
-
-    ESP_LOGI(TAG, "Memory allocated successfully. Tensor Arena: %p, Model Data: %p", tensor_arena, model_data);
 
     esp_log_level_set("*", ESP_LOG_VERBOSE);
 
@@ -411,6 +395,6 @@ extern "C" void app_main(void) {
     }
 
     // 태스크 생성: 스택 크기를 충분히 할당하고, 우선순위와 코어를 설정
-    xTaskCreatePinnedToCore(audio_capture_task, "Audio Capture", 4096, &i2s_rx_channel, 5, nullptr, 0);
-    xTaskCreatePinnedToCore(model_inference_task, "Model Inference", 8192, nullptr, 6, nullptr, 0);
+    xTaskCreatePinnedToCore(audio_capture_task, "Audio Capture", 4*1024, &i2s_rx_channel, 5, nullptr, 0);
+    xTaskCreatePinnedToCore(model_inference_task, "Model Inference", 16*1024, nullptr, 6, nullptr, 0);
 }
